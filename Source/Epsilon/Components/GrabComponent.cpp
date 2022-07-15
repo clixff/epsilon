@@ -1,0 +1,223 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "GrabComponent.h"
+#include "DrawDebugHelpers.h"
+#include "../Characters/Player/PlayerCharacter.h"
+#include "../World/GrabActor.h"
+
+
+UGrabComponent::UGrabComponent(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	BoxExtent = FVector(10.0f);
+
+	SetGenerateOverlapEvents(false);
+
+	SetCollisionProfileName(TEXT("Grab"), false);
+
+	PrimaryComponentTick.bCanEverTick = true;
+}
+
+void UGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
+{
+	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
+
+	DrawDebugSphere(GetWorld(), GetComponentLocation(), 5.0f, 8, FColor(128, 128, 128, 255));
+
+	if (ControllerToFlyTo)
+	{
+		FlyToControllerTick(DeltaTime);
+	}
+}
+
+void UGrabComponent::OnGrab(EHand Hand)
+{
+	if (bGrabbing)
+	{
+		return;
+	}
+
+	auto* Actor = Cast<AGrabActor>(GetOwner());
+
+	if (Actor)
+	{
+		if (Actor->bGrabbing || Actor->bFlyingToController)
+		{
+			return;
+		}
+
+		Actor->OnGrab(Hand);
+	}
+
+	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
+
+	if (PlayerCharacter)
+	{
+		if (Hand == EHand::Left)
+		{
+			PlayerCharacter->GrabComponentLeft = this;
+			PlayerCharacter->GrabComponentFlyingLeft = nullptr;
+		}
+		else
+		{
+			PlayerCharacter->GrabComponentRight = this;
+			PlayerCharacter->GrabComponentFlyingRight = nullptr;
+		}
+	}
+
+	if (Actor && PlayerCharacter)
+	{
+		UPrimitiveComponent* HandComponent = nullptr;
+
+		if (Hand == EHand::Left)
+		{
+			HandComponent = PlayerCharacter->MotionControllerLeft;
+		}
+		else
+		{
+			HandComponent = PlayerCharacter->MotionControllerRight;
+		}
+
+		if (HandComponent)
+		{
+			Actor->SetActorRotation(FRotator::ZeroRotator);
+			/** Relative location (Component to actor) */
+			FVector DeltaLocation = Actor->GetActorLocation() - GetComponentLocation();
+
+			float CollisionOffset = GetScaledBoxExtent().X;
+
+			if (Hand == EHand::Left)
+			{
+				CollisionOffset *= -1.0f;
+			}
+
+			DeltaLocation = FRotator(-90.0f, 0.0f, 0.0f).RotateVector(DeltaLocation);
+
+			DeltaLocation.Y -= CollisionOffset;
+
+			Actor->AttachToComponent(HandComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
+
+			Actor->SetActorRelativeLocation(DeltaLocation);
+			Actor->SetActorRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+		}
+	}
+
+	bGrabbing = true;
+}
+
+void UGrabComponent::OnUnGrab(EHand Hand)
+{
+	auto* PlayerCharacter =  Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
+
+	if (PlayerCharacter)
+	{
+		if (PlayerCharacter->GrabComponentRight == this)
+		{
+			PlayerCharacter->GrabComponentRight = nullptr;
+		}
+
+		if (PlayerCharacter->GrabComponentLeft == this)
+		{
+			PlayerCharacter->GrabComponentLeft = nullptr;
+		}
+	}
+	
+	auto* Actor = Cast<AGrabActor>(GetOwner());
+
+	if (Actor)
+	{
+		Actor->OnUnGrab();
+
+		Actor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	}
+
+	if (PlayerCharacter && Actor)
+	{
+		FVector Velocity = PlayerCharacter->GetDeltaControllerPosition(Hand);
+		//Velocity.Normalize();
+
+		Actor->StaticMesh->AddImpulse(Velocity, NAME_None, true);
+	}
+
+	bGrabbing = false;
+}
+
+void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
+{
+	if (bGrabbing)
+	{
+		return;
+	}
+
+	auto* Actor = Cast<AGrabActor>(GetOwner());
+
+	if (Actor)
+	{
+		if (Actor->bGrabbing)
+		{
+			return;
+		}
+
+		Actor->bFlyingToController = true;
+		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Actor->StaticMesh->SetSimulatePhysics(false);
+
+		Actor->SetActorRotation(FRotator::ZeroRotator);
+	}
+
+	FlyValue = 0.0f;
+	FlyStart = GetComponentLocation();
+	ControllerToFlyTo = Controller;
+}
+
+void UGrabComponent::FlyToControllerTick(float DeltaTime)
+{
+	FlyValue += DeltaTime * 3.0f;
+
+	FlyValue = FMath::Clamp(FlyValue, 0.0f, 1.0f);
+
+	auto* Actor = Cast<AGrabActor>(GetOwner());
+	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
+
+	EHand Hand = EHand::Right;
+
+	if (PlayerCharacter->MotionControllerLeft == ControllerToFlyTo)
+	{
+		Hand = EHand::Left;
+	}
+
+	FVector DeltaLocation = Actor->GetActorLocation() - GetComponentLocation();
+
+	float CollisionOffset = GetScaledBoxExtent().X;
+
+	if (Hand == EHand::Left)
+	{
+		CollisionOffset *= -1.0f;
+	}
+
+	DeltaLocation.Y -= CollisionOffset;
+
+	DeltaLocation = ControllerToFlyTo->GetComponentRotation().RotateVector(DeltaLocation);
+
+	FVector FlyEnd = ControllerToFlyTo->GetComponentLocation() + DeltaLocation;
+
+	FVector NewLocation = FMath::Lerp(FlyStart, FlyEnd, FlyValue);
+
+	Actor->SetActorLocation(NewLocation);
+
+	if (FlyValue >= 1.0f)
+	{
+		if (Actor)
+		{
+			Actor->bFlyingToController = false;
+			Actor->StaticMesh->SetCollisionEnabled(Actor->CollisionType);
+		}
+
+		OnGrab(Hand);
+
+		ControllerToFlyTo = nullptr;
+		FlyValue = 0.0f;
+		FlyStart = FVector::ZeroVector;
+	}
+}

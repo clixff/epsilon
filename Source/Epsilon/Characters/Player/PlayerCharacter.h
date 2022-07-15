@@ -6,6 +6,8 @@
 #include "GameFramework/Character.h"
 #include "MotionControllerComponent.h"
 #include "Camera/CameraComponent.h"
+#include "../../Components/GrabComponent.h"
+#include "../../Misc/Misc.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -39,4 +41,40 @@ public:
 
 	UPROPERTY(EditAnywhere)
 		UHapticFeedbackEffect_Base* ControllerVibrationCurve;
+
+	UPROPERTY(EditAnywhere)
+		FVector FingerTraceOffset;
+
+	UPROPERTY(VisibleAnywhere)
+		UGrabComponent* GrabComponentRight = nullptr;
+
+	UPROPERTY(VisibleAnywhere)
+		UGrabComponent* GrabComponentLeft = nullptr;
+
+	void OnGrab(EHand Hand);
+
+	void OnUnGrab(EHand Hand);
+
+	FVector GetDeltaControllerPosition(EHand Hand);
+
+	void OnAction(EHand Hand, bool bGrabPressed);
+
+	UPROPERTY(VisibleAnywhere)
+		UGrabComponent* GrabComponentFlyingRight = nullptr;
+
+	UPROPERTY(VisibleAnywhere)
+		UGrabComponent* GrabComponentFlyingLeft = nullptr;
+private:
+	void TraceFromFinger();
+
+	TArray<FVector> ControllerRightPositions;
+	TArray<FVector> ControllerLeftPositions;
+
+	int32 MaxControllerPositions = 15;
+
+	void UpdateCachedControllerPosition(EHand Hand);
+
+	FVector FingerTraceLeft;
+	FVector FingerTraceRight;
+
 };
