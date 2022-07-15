@@ -72,6 +72,9 @@ public:
 	UPROPERTY(EditAnywhere)
 		UBoxComponent* FistCollisionLeft = nullptr;
 
+	UPROPERTY(EditAnywhere)
+		USceneComponent* VROrigin = nullptr;
+
 	void SetFistCollisionEnabled(EHand Hand, bool bEnabled);
 
 	void UpdateBodyPositionInVR();

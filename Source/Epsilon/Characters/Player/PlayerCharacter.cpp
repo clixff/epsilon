@@ -17,18 +17,18 @@ APlayerCharacter::APlayerCharacter()
  	// Set this pawn to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	VROrigin = CreateDefaultSubobject<USceneComponent>(TEXT("VROrigin"));
+	VROrigin->SetupAttachment(GetRootComponent());
+
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("VRCamera"));
-	Camera->SetupAttachment(GetRootComponent());
-	Camera->bLockToHmd = false;
-	//Camera->SetUsingAbsoluteLocation(true);
-	//Camera->SetUsingAbsoluteRotation(true);
+	Camera->SetupAttachment(VROrigin);
 
 	MotionControllerLeft = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("MotionController_Left"));
-	MotionControllerLeft->SetupAttachment(GetRootComponent());
+	MotionControllerLeft->SetupAttachment(VROrigin);
 	MotionControllerLeft->SetTrackingSource(EControllerHand::Left);
 
 	MotionControllerRight = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("MotionController_Right"));
-	MotionControllerRight->SetupAttachment(GetRootComponent());
+	MotionControllerRight->SetupAttachment(VROrigin);
 	MotionControllerRight->SetTrackingSource(EControllerHand::Right);
 
 	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
@@ -72,7 +72,7 @@ void APlayerCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	/** Update body mesh and collision when player moves in a room */
-	//UpdateBodyPositionInVR();
+	UpdateBodyPositionInVR();
 
 	UpdateCachedControllerPosition(EHand::Right);
 	UpdateCachedControllerPosition(EHand::Left);
@@ -202,33 +202,15 @@ void APlayerCharacter::SetFistCollisionEnabled(EHand Hand, bool bEnabled)
 
 void APlayerCharacter::UpdateBodyPositionInVR()
 {
-	FVector HMDLocation;
-	FRotator HMDRotation;
-	UHeadMountedDisplayFunctionLibrary::GetOrientationAndPosition(HMDRotation, HMDLocation);
-
-	FRotator BodyRotation = GetActorRotation();
-
-	HMDRotation.Yaw += BodyRotation.Yaw;
-
-	Camera->SetWorldLocationAndRotation(HMDLocation, HMDRotation);
-
 	FVector CameraLocation = Camera->GetComponentLocation();
-	FVector RightHandLocation = MotionControllerRight->GetComponentLocation();
-	FVector LeftHandLocation = MotionControllerLeft->GetComponentLocation();
+	FVector ActorLocation = GetCapsuleComponent()->GetComponentLocation();
 
-	FVector OldLocation = GetActorLocation();
+	FVector Delta = CameraLocation - ActorLocation;
+	Delta.Z = 0.0f;
 
-	FVector NewLocation = CameraLocation;
+	AddActorWorldOffset(Delta);
 
-	NewLocation.Z = OldLocation.Z;
-
-	SetActorLocation(NewLocation);
-
-	
-
-	//Camera->SetWorldLocation(CameraLocation);
-	//MotionControllerRight->SetWorldLocation(RightHandLocation);
-	//MotionControllerLeft->SetWorldLocation(LeftHandLocation);
+	VROrigin->AddWorldOffset(Delta * -1.0f);
 }
 
 void APlayerCharacter::TraceFromFinger(EHand Hand)

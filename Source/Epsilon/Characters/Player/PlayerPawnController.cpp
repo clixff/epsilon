@@ -45,10 +45,6 @@ void APlayerPawnController::Move(EAxis::Type Axis, float Value)
 
 	const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(Axis);
 
-	//auto* Camera = Cast<APlayerCharacter>(GetPawn())->Camera;
-
-	//Camera->AddWorldOffset(Direction * Value);
-
 	GetPawn()->AddMovementInput(Direction, Value);
 }
 
