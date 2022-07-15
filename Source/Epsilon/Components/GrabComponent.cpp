@@ -79,6 +79,8 @@ void UGrabComponent::OnGrab(EHand Hand)
 			HandComponent = PlayerCharacter->MotionControllerRight;
 		}
 
+		PlayerCharacter->SetFistCollisionEnabled(Hand, false);
+
 		if (HandComponent)
 		{
 			Actor->SetActorRotation(FRotator::ZeroRotator);
@@ -104,6 +106,8 @@ void UGrabComponent::OnGrab(EHand Hand)
 	}
 
 	bGrabbing = true;
+
+	GetWorld()->GetFirstPlayerController()->PlayHapticEffect(PlayerCharacter->ControllerVibrationCurve, Hand == EHand::Right ? EControllerHand::Right : EControllerHand::Left, 1.0f, false);
 }
 
 void UGrabComponent::OnUnGrab(EHand Hand)
@@ -159,9 +163,12 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 			return;
 		}
 
+		Actor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
 		Actor->bFlyingToController = true;
-		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		//Actor->CollisionType = Actor->StaticMesh->GetCollisionEnabled();
 		Actor->StaticMesh->SetSimulatePhysics(false);
+		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 		Actor->SetActorRotation(FRotator::ZeroRotator);
 	}
@@ -205,6 +212,17 @@ void UGrabComponent::FlyToControllerTick(float DeltaTime)
 	FVector NewLocation = FMath::Lerp(FlyStart, FlyEnd, FlyValue);
 
 	Actor->SetActorLocation(NewLocation);
+
+	FRotator StartRotation = FRotator::ZeroRotator;
+	FRotator EndRotation = FRotator(360.0f, 360.0f, 360.0f) * 1.0f;
+
+	FRotator NewRotation;
+
+	NewRotation.Pitch = FMath::Lerp(StartRotation.Pitch, EndRotation.Pitch, FlyValue);
+	NewRotation.Yaw = FMath::Lerp(StartRotation.Yaw, EndRotation.Yaw, FlyValue);
+	NewRotation.Roll = FMath::Lerp(StartRotation.Roll, EndRotation.Roll, FlyValue);
+
+	Actor->SetActorRotation(NewRotation);
 
 	if (FlyValue >= 1.0f)
 	{

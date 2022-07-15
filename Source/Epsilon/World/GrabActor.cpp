@@ -14,6 +14,9 @@ AGrabActor::AGrabActor()
 
 	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
 	StaticMesh->CanCharacterStepUpOn = ECanBeCharacterBase::ECB_No;
+	StaticMesh->SetCastShadow(false);
+	StaticMesh->SetGenerateOverlapEvents(false);
+	StaticMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
 
 	GrabComponent = CreateDefaultSubobject<UGrabComponent>(TEXT("Grab"));
 	GrabComponent->SetupAttachment(StaticMesh);
@@ -25,8 +28,7 @@ void AGrabActor::BeginPlay()
 	Super::BeginPlay();
 	
 	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
-	CollisionType = StaticMesh->GetCollisionEnabled();
-
+	//CollisionType = StaticMesh->GetCollisionEnabled();
 }
 
 // Called every frame
@@ -38,10 +40,11 @@ void AGrabActor::Tick(float DeltaTime)
 
 void AGrabActor::OnGrab(EHand Hand)
 {
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	bGrabbing = true;
 	StaticMesh->SetSimulatePhysics(false);
 
-	CollisionType = StaticMesh->GetCollisionEnabled();
+	//CollisionType = StaticMesh->GetCollisionEnabled();
 
 	//StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 }
@@ -49,8 +52,8 @@ void AGrabActor::OnGrab(EHand Hand)
 void AGrabActor::OnUnGrab()
 {
 	bGrabbing = false;
-	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
-	
 	StaticMesh->SetCollisionEnabled(CollisionType);
+
+	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
 }
 

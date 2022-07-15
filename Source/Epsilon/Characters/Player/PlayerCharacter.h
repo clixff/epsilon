@@ -8,6 +8,7 @@
 #include "Camera/CameraComponent.h"
 #include "../../Components/GrabComponent.h"
 #include "../../Misc/Misc.h"
+#include "Components/BoxComponent.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -64,8 +65,18 @@ public:
 
 	UPROPERTY(VisibleAnywhere)
 		UGrabComponent* GrabComponentFlyingLeft = nullptr;
+
+	UPROPERTY(EditAnywhere)
+		UBoxComponent* FistCollisionRight = nullptr;
+
+	UPROPERTY(EditAnywhere)
+		UBoxComponent* FistCollisionLeft = nullptr;
+
+	void SetFistCollisionEnabled(EHand Hand, bool bEnabled);
+
+	void UpdateBodyPositionInVR();
 private:
-	void TraceFromFinger();
+	void TraceFromFinger(EHand Hand);
 
 	TArray<FVector> ControllerRightPositions;
 	TArray<FVector> ControllerLeftPositions;

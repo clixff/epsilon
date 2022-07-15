@@ -4,6 +4,10 @@
 #include "PlayerCharacter.h"
 #include "HeadMountedDisplayFunctionLibrary.h"
 #include "DrawDebugHelpers.h"
+#include "Components/CapsuleComponent.h"
+#include "IXRTrackingSystem.h"
+#include "Components/ArrowComponent.h"
+#include "../../World/GrabActor.h"
 
 
 
@@ -15,6 +19,9 @@ APlayerCharacter::APlayerCharacter()
 
 	Camera = CreateDefaultSubobject<UCameraComponent>(TEXT("VRCamera"));
 	Camera->SetupAttachment(GetRootComponent());
+	Camera->bLockToHmd = false;
+	//Camera->SetUsingAbsoluteLocation(true);
+	//Camera->SetUsingAbsoluteRotation(true);
 
 	MotionControllerLeft = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("MotionController_Left"));
 	MotionControllerLeft->SetupAttachment(GetRootComponent());
@@ -23,6 +30,20 @@ APlayerCharacter::APlayerCharacter()
 	MotionControllerRight = CreateDefaultSubobject<UMotionControllerComponent>(TEXT("MotionController_Right"));
 	MotionControllerRight->SetupAttachment(GetRootComponent());
 	MotionControllerRight->SetTrackingSource(EControllerHand::Right);
+
+	GetCapsuleComponent()->SetGenerateOverlapEvents(false);
+
+	FistCollisionRight = CreateDefaultSubobject<UBoxComponent>(TEXT("FistRight"));
+	FistCollisionRight->SetupAttachment(MotionControllerRight);
+	FistCollisionRight->SetCollisionProfileName(TEXT("Fist"));
+	FistCollisionRight->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	FistCollisionLeft = CreateDefaultSubobject<UBoxComponent>(TEXT("FistLeft"));
+	FistCollisionLeft->SetupAttachment(MotionControllerLeft);
+	FistCollisionLeft->SetCollisionProfileName(TEXT("Fist"));
+	FistCollisionLeft->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+
+	GetArrowComponent()->SetHiddenInGame(false);
 }
 
 // Called when the game starts or when spawned
@@ -41,6 +62,8 @@ void APlayerCharacter::BeginPlay()
 
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat unit"));
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat fps"));
+
+	Camera->SetWorldLocation(GetActorLocation());
 }
 
 // Called every frame
@@ -48,10 +71,14 @@ void APlayerCharacter::Tick(float DeltaTime)
 {
 	Super::Tick(DeltaTime);
 
+	/** Update body mesh and collision when player moves in a room */
+	//UpdateBodyPositionInVR();
+
 	UpdateCachedControllerPosition(EHand::Right);
 	UpdateCachedControllerPosition(EHand::Left);
 
-	TraceFromFinger();
+	TraceFromFinger(EHand::Right);
+	TraceFromFinger(EHand::Left);
 }
 
 // Called to bind functionality to input
@@ -114,6 +141,7 @@ void APlayerCharacter::OnGrab(EHand Hand)
 
 	if (!HitResult.bBlockingHit)
 	{
+		SetFistCollisionEnabled(Hand, true);
 		return;
 	}
 
@@ -125,14 +153,15 @@ void APlayerCharacter::OnGrab(EHand Hand)
 	}
 
 	GrabComponent->OnGrab(Hand);
-
-	Cast<APlayerController>(GetController())->PlayHapticEffect(ControllerVibrationCurve, Hand == EHand::Right ? EControllerHand::Right : EControllerHand::Left, 1.0f, false);
 }
 
 void APlayerCharacter::OnUnGrab(EHand Hand)
 {
+	SetFistCollisionEnabled(Hand, false);
+
 	UGrabComponent* GrabComponent = nullptr;
 	UMotionControllerComponent* HandComponent = nullptr;
+
 	if (Hand == EHand::Left)
 	{
 		GrabComponent = GrabComponentLeft;
@@ -157,13 +186,57 @@ void APlayerCharacter::OnUnGrab(EHand Hand)
 
 		UE_LOG(LogTemp, Display, TEXT("[APlayerCharacter] Velocity: %s"), *Velocity.ToString());
 	}
+
 }
 
-void APlayerCharacter::TraceFromFinger()
+void APlayerCharacter::SetFistCollisionEnabled(EHand Hand, bool bEnabled)
 {
-	FVector StartLocation = MotionControllerRight->GetComponentLocation();
+	auto* Fist = Hand == EHand::Right ? FistCollisionRight : FistCollisionLeft;
 
-	FRotator Rotation = MotionControllerRight->GetComponentRotation();
+	Fist->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+
+	Fist->SetHiddenInGame(!bEnabled);
+
+	Fist->SetGenerateOverlapEvents(bEnabled);
+}
+
+void APlayerCharacter::UpdateBodyPositionInVR()
+{
+	FVector HMDLocation;
+	FRotator HMDRotation;
+	UHeadMountedDisplayFunctionLibrary::GetOrientationAndPosition(HMDRotation, HMDLocation);
+
+	FRotator BodyRotation = GetActorRotation();
+
+	HMDRotation.Yaw += BodyRotation.Yaw;
+
+	Camera->SetWorldLocationAndRotation(HMDLocation, HMDRotation);
+
+	FVector CameraLocation = Camera->GetComponentLocation();
+	FVector RightHandLocation = MotionControllerRight->GetComponentLocation();
+	FVector LeftHandLocation = MotionControllerLeft->GetComponentLocation();
+
+	FVector OldLocation = GetActorLocation();
+
+	FVector NewLocation = CameraLocation;
+
+	NewLocation.Z = OldLocation.Z;
+
+	SetActorLocation(NewLocation);
+
+	
+
+	//Camera->SetWorldLocation(CameraLocation);
+	//MotionControllerRight->SetWorldLocation(RightHandLocation);
+	//MotionControllerLeft->SetWorldLocation(LeftHandLocation);
+}
+
+void APlayerCharacter::TraceFromFinger(EHand Hand)
+{
+	auto* ControllerRef = Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
+	FVector StartLocation = ControllerRef->GetComponentLocation();
+
+	FRotator Rotation = ControllerRef->GetComponentRotation();
 
 	StartLocation += Rotation.RotateVector(FingerTraceOffset);
 
@@ -190,7 +263,14 @@ void APlayerCharacter::TraceFromFinger()
 
 	DrawDebugLine(GetWorld(), StartLocation, RealEndLocation, FColor(255, 255, 255, 128), false, -1.0f, 0, 0.5f);
 
-	FingerTraceRight = RealEndLocation;
+	if (Hand == EHand::Right)
+	{
+		FingerTraceRight = RealEndLocation;
+	}
+	else
+	{
+		FingerTraceLeft = RealEndLocation;
+	}
 }
 
 FVector APlayerCharacter::GetDeltaControllerPosition(EHand Hand)
@@ -241,20 +321,41 @@ void APlayerCharacter::OnAction(EHand Hand, bool bGrabPressed)
 		return;
 	}
 
-	FHitResult HitResult;
+	TArray<FHitResult> HitResults;
 	FCollisionQueryParams Params;
 	Params.bTraceComplex = false;
 	Params.AddIgnoredActor(this);
 
-	GetWorld()->SweepSingleByChannel(HitResult, Location, Location, FQuat(FRotator::ZeroRotator), ECollisionChannel::ECC_GameTraceChannel3, FCollisionShape::MakeSphere(SphereRadius), Params);
+	GetWorld()->SweepMultiByChannel(HitResults, Location, Location, FQuat(FRotator::ZeroRotator), ECollisionChannel::ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), Params);
 
+	TArray<AGrabActor*> GrabActors;
+	AGrabActor* GrabActor = nullptr;
+	float MinDist = 0.0f;
 
-	if (!HitResult.bBlockingHit)
+	for (auto& HitResult : HitResults)
+	{
+		auto* Actor = Cast<AGrabActor>(HitResult.GetActor());
+
+		if (!Actor)
+		{
+			continue;
+		}
+
+		float Dist = FVector::Dist(Location, Actor->GetActorLocation());
+
+		if (!GrabActor || Dist < MinDist)
+		{
+			GrabActor = Actor;
+			MinDist = Dist;
+		}
+	}
+
+	if (!GrabActor)
 	{
 		return;
 	}
 
-	auto* GrabComponent = Cast<UGrabComponent>(HitResult.GetComponent());
+	auto* GrabComponent = Cast<UGrabComponent>(GrabActor->GrabComponent);
 
 	if (!GrabComponent)
 	{

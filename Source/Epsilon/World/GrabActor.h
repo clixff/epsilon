@@ -45,6 +45,6 @@ public:
 
 	bool bFlyingToController = false;
 
-	ECollisionEnabled::Type CollisionType;
+	ECollisionEnabled::Type CollisionType = ECollisionEnabled::QueryAndPhysics;
 
 };
