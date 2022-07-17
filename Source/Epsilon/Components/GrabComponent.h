@@ -10,7 +10,7 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(meta = (DisplayName = "Grab Component", BlueprintSpawnableComponent))
 class EPSILON_API UGrabComponent : public UBoxComponent
 {
 	GENERATED_BODY()
@@ -30,10 +30,13 @@ public:
 		UPrimitiveComponent* ControllerToFlyTo = nullptr;
 
 	void FlyToController(UPrimitiveComponent* Controller);
+
+	void GetTransformForAttach(EHand Hand, FVector& Location, FRotator& Rotation);
 private:
 	float FlyValue = 0.0f;
 
 	FVector FlyStart;
+	FRotator FlyStartRotation;
 
 	void FlyToControllerTick(float DeltaTime);
 };

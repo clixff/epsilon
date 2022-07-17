@@ -7,7 +7,6 @@
 #include "Components/CapsuleComponent.h"
 #include "IXRTrackingSystem.h"
 #include "Components/ArrowComponent.h"
-#include "../../World/GrabActor.h"
 
 
 
@@ -62,8 +61,6 @@ void APlayerCharacter::BeginPlay()
 
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat unit"));
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat fps"));
-
-	Camera->SetWorldLocation(GetActorLocation());
 }
 
 // Called every frame
@@ -74,8 +71,8 @@ void APlayerCharacter::Tick(float DeltaTime)
 	/** Update body mesh and collision when player moves in a room */
 	UpdateBodyPositionInVR();
 
-	UpdateCachedControllerPosition(EHand::Right);
-	UpdateCachedControllerPosition(EHand::Left);
+	UpdateCachedControllerPosition(EHand::Right, DeltaTime);
+	UpdateCachedControllerPosition(EHand::Left, DeltaTime);
 
 	TraceFromFinger(EHand::Right);
 	TraceFromFinger(EHand::Left);
@@ -90,13 +87,19 @@ void APlayerCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCom
 
 void APlayerCharacter::OnGrab(EHand Hand)
 {
-	if (Hand == EHand::Left && (GrabComponentLeft || GrabComponentFlyingLeft))
+	if (Hand == EHand::Right)
 	{
-		return;
+		if (GrabComponentRight || GrabComponentFlyingRight)
+		{
+			return;
+		}
 	}
-	else if (Hand == EHand::Right && (GrabComponentRight || GrabComponentFlyingRight))
+	else
 	{
-		return;
+		if (GrabComponentLeft || GrabComponentFlyingLeft)
+		{
+			return;
+		}
 	}
 
 	UPrimitiveComponent* HandComponent = nullptr;
@@ -158,7 +161,35 @@ void APlayerCharacter::OnGrab(EHand Hand)
 void APlayerCharacter::OnUnGrab(EHand Hand)
 {
 	SetFistCollisionEnabled(Hand, false);
+	DetachItemFromHand(Hand);
+}
 
+void APlayerCharacter::SetFistCollisionEnabled(EHand Hand, bool bEnabled)
+{
+	auto* Fist = Hand == EHand::Right ? FistCollisionRight : FistCollisionLeft;
+
+	Fist->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+
+	Fist->SetHiddenInGame(!bEnabled);
+
+	Fist->SetGenerateOverlapEvents(bEnabled);
+}
+
+void APlayerCharacter::UpdateBodyPositionInVR()
+{
+	FVector CameraLocation = Camera->GetComponentLocation();
+	FVector ActorLocation = GetCapsuleComponent()->GetComponentLocation();
+
+	FVector Delta = CameraLocation - ActorLocation;
+	Delta.Z = 0.0f;
+
+	AddActorWorldOffset(Delta);
+
+	VROrigin->AddWorldOffset(Delta * -1.0f);
+}
+
+void APlayerCharacter::DetachItemFromHand(EHand Hand)
+{
 	UGrabComponent* GrabComponent = nullptr;
 	UMotionControllerComponent* HandComponent = nullptr;
 
@@ -186,31 +217,18 @@ void APlayerCharacter::OnUnGrab(EHand Hand)
 
 		UE_LOG(LogTemp, Display, TEXT("[APlayerCharacter] Velocity: %s"), *Velocity.ToString());
 	}
-
 }
 
-void APlayerCharacter::SetFistCollisionEnabled(EHand Hand, bool bEnabled)
+void APlayerCharacter::SpawnActor(EHand Hand)
 {
-	auto* Fist = Hand == EHand::Right ? FistCollisionRight : FistCollisionLeft;
+	if (!GrabActorToSpawn)
+	{
+		return;
+	}
 
-	Fist->SetCollisionEnabled(bEnabled ? ECollisionEnabled::QueryAndPhysics : ECollisionEnabled::NoCollision);
+	FVector& Location = Hand == EHand::Right ? FingerTraceRight : FingerTraceLeft;
 
-	Fist->SetHiddenInGame(!bEnabled);
-
-	Fist->SetGenerateOverlapEvents(bEnabled);
-}
-
-void APlayerCharacter::UpdateBodyPositionInVR()
-{
-	FVector CameraLocation = Camera->GetComponentLocation();
-	FVector ActorLocation = GetCapsuleComponent()->GetComponentLocation();
-
-	FVector Delta = CameraLocation - ActorLocation;
-	Delta.Z = 0.0f;
-
-	AddActorWorldOffset(Delta);
-
-	VROrigin->AddWorldOffset(Delta * -1.0f);
+	GetWorld()->SpawnActor<AGrabActor>(GrabActorToSpawn, Location, FRotator::ZeroRotator);
 }
 
 void APlayerCharacter::TraceFromFinger(EHand Hand)
@@ -257,7 +275,7 @@ void APlayerCharacter::TraceFromFinger(EHand Hand)
 
 FVector APlayerCharacter::GetDeltaControllerPosition(EHand Hand)
 {
-	TArray<FVector>& Array = Hand == EHand::Right ? ControllerRightPositions : ControllerLeftPositions;
+	TArray<FVector>& Array = Hand == EHand::Right ? ControllerRightDeltas : ControllerLeftDeltas;
 
 	if (Array.Num() <= 1)
 	{
@@ -268,11 +286,11 @@ FVector APlayerCharacter::GetDeltaControllerPosition(EHand Hand)
 
 	FVector Delta;
 
-	const float Scale = 15.0f;
+	const float Scale = 300.0f;
 
-	for (int32 i = 1; i < Array.Num(); i++)
+	for (int32 i = 0; i < Array.Num(); i++)
 	{
-		FVector DeltaTemp = Array[i] - Array[i - 1];
+		FVector DeltaTemp = Array[i];
 
 		Delta += DeltaTemp;
 	}
@@ -285,12 +303,13 @@ void APlayerCharacter::OnAction(EHand Hand, bool bGrabPressed)
 	UMotionControllerComponent* ControllerRef = Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
 	FVector& Location = Hand == EHand::Right ? FingerTraceRight : FingerTraceLeft;
 
-	float SphereRadius = 50.0f;
+	float SphereRadius = 100.0f;
 
 	DrawDebugSphere(GetWorld(), Location, SphereRadius, 8, FColor(109, 89, 227, 255), false, 0.5f);
 
 	if (!bGrabPressed)
 	{
+		SpawnActor(Hand);
 		return;
 	}
 
@@ -357,9 +376,9 @@ void APlayerCharacter::OnAction(EHand Hand, bool bGrabPressed)
 }
 
 
-void APlayerCharacter::UpdateCachedControllerPosition(EHand Hand)
+void APlayerCharacter::UpdateCachedControllerPosition(EHand Hand, float DeltaTime)
 {
-	TArray<FVector>& Array = Hand == EHand::Right ? ControllerRightPositions : ControllerLeftPositions;
+	TArray<FVector>& Array = Hand == EHand::Right ? ControllerRightDeltas : ControllerLeftDeltas;
 
 	UMotionControllerComponent* HandComponent = Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
 
@@ -369,8 +388,21 @@ void APlayerCharacter::UpdateCachedControllerPosition(EHand Hand)
 	}
 
 	FVector WorldLocation = HandComponent->GetComponentLocation();
+	FVector OldLocation = Hand == EHand::Right ? ControllerRightLastTickLocation : ControllerLeftLastTickLocation;
 
-	Array.Add(WorldLocation);
+	FVector Delta;
+	Delta = (WorldLocation - OldLocation) * DeltaTime;
+
+	if (Hand == EHand::Right)
+	{
+		ControllerRightLastTickLocation = WorldLocation;
+	}
+	else
+	{
+		ControllerLeftLastTickLocation = WorldLocation;
+	}
+
+	Array.Add(Delta);
 
 	if (Array.Num() > MaxControllerPositions)
 	{

@@ -84,24 +84,16 @@ void UGrabComponent::OnGrab(EHand Hand)
 		if (HandComponent)
 		{
 			Actor->SetActorRotation(FRotator::ZeroRotator);
-			/** Relative location (Component to actor) */
-			FVector DeltaLocation = Actor->GetActorLocation() - GetComponentLocation();
 
-			float CollisionOffset = GetScaledBoxExtent().X;
+			FVector AttachLocation;
+			FRotator AttachRotation;
 
-			if (Hand == EHand::Left)
-			{
-				CollisionOffset *= -1.0f;
-			}
-
-			DeltaLocation = FRotator(-90.0f, 0.0f, 0.0f).RotateVector(DeltaLocation);
-
-			DeltaLocation.Y -= CollisionOffset;
+			GetTransformForAttach(Hand, AttachLocation, AttachRotation);
 
 			Actor->AttachToComponent(HandComponent, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 
-			Actor->SetActorRelativeLocation(DeltaLocation);
-			Actor->SetActorRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+			Actor->SetActorRelativeLocation(AttachLocation);
+			Actor->SetActorRelativeRotation(AttachRotation);
 		}
 	}
 
@@ -170,12 +162,37 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 		Actor->StaticMesh->SetSimulatePhysics(false);
 		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-		Actor->SetActorRotation(FRotator::ZeroRotator);
+		FlyStartRotation = Actor->GetActorRotation();
+
+		//Actor->SetActorRotation(FRotator::ZeroRotator);
 	}
 
 	FlyValue = 0.0f;
 	FlyStart = GetComponentLocation();
 	ControllerToFlyTo = Controller;
+}
+
+void UGrabComponent::GetTransformForAttach(EHand Hand, FVector& Location, FRotator& Rotation)
+{
+	/** Relative location (Component to actor) */
+	FVector DeltaLocation = GetOwner()->GetActorLocation() - GetComponentLocation();
+
+	float CollisionOffset = GetScaledBoxExtent().X;
+	FRotator ActorRelativeRotation = FRotator(-90.0f, 0.0f, 0.0f);
+
+	if (Hand == EHand::Left)
+	{
+		CollisionOffset *= -1.0f;
+		ActorRelativeRotation.Yaw = 180.0f;
+		ActorRelativeRotation.Pitch = 90.0f;
+	}
+
+	DeltaLocation = ActorRelativeRotation.RotateVector(DeltaLocation);
+
+	DeltaLocation.Y -= CollisionOffset;
+
+	Location = DeltaLocation;
+	Rotation = ActorRelativeRotation;
 }
 
 void UGrabComponent::FlyToControllerTick(float DeltaTime)
@@ -194,27 +211,32 @@ void UGrabComponent::FlyToControllerTick(float DeltaTime)
 		Hand = EHand::Left;
 	}
 
-	FVector DeltaLocation = Actor->GetActorLocation() - GetComponentLocation();
+	//FVector DeltaLocation = Actor->GetActorLocation() - GetComponentLocation();
 
-	float CollisionOffset = GetScaledBoxExtent().X;
+	//float CollisionOffset = GetScaledBoxExtent().X;
 
-	if (Hand == EHand::Left)
-	{
-		CollisionOffset *= -1.0f;
-	}
+	//if (Hand == EHand::Left)
+	//{
+	//	CollisionOffset *= -1.0f;
+	//}
 
-	DeltaLocation.Y -= CollisionOffset;
+	//DeltaLocation.Y -= CollisionOffset;
 
-	DeltaLocation = ControllerToFlyTo->GetComponentRotation().RotateVector(DeltaLocation);
+	//DeltaLocation = ControllerToFlyTo->GetComponentRotation().RotateVector(DeltaLocation);
 
-	FVector FlyEnd = ControllerToFlyTo->GetComponentLocation() + DeltaLocation;
+	FVector AttachLocation;
+	FRotator AttachRotation;
+
+	GetTransformForAttach(Hand, AttachLocation, AttachRotation);
+
+	FVector FlyEnd = ControllerToFlyTo->GetComponentLocation() + AttachLocation;
 
 	FVector NewLocation = FMath::Lerp(FlyStart, FlyEnd, FlyValue);
 
 	Actor->SetActorLocation(NewLocation);
 
-	FRotator StartRotation = FRotator::ZeroRotator;
-	FRotator EndRotation = FRotator(360.0f, 360.0f, 360.0f) * 1.0f;
+	FRotator StartRotation = FlyStartRotation;
+	FRotator EndRotation = AttachRotation;
 
 	FRotator NewRotation;
 

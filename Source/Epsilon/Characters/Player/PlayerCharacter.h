@@ -9,6 +9,7 @@
 #include "../../Components/GrabComponent.h"
 #include "../../Misc/Misc.h"
 #include "Components/BoxComponent.h"
+#include "../../World/GrabActor.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -78,17 +79,26 @@ public:
 	void SetFistCollisionEnabled(EHand Hand, bool bEnabled);
 
 	void UpdateBodyPositionInVR();
+
+	void DetachItemFromHand(EHand Hand);
+
+	UPROPERTY(EditAnywhere)
+		TSubclassOf<AGrabActor> GrabActorToSpawn = nullptr;
+
+	void SpawnActor(EHand Hand);
 private:
 	void TraceFromFinger(EHand Hand);
 
-	TArray<FVector> ControllerRightPositions;
-	TArray<FVector> ControllerLeftPositions;
+	TArray<FVector> ControllerRightDeltas;
+	TArray<FVector> ControllerLeftDeltas;
 
 	int32 MaxControllerPositions = 15;
 
-	void UpdateCachedControllerPosition(EHand Hand);
+	void UpdateCachedControllerPosition(EHand Hand, float DeltaTime);
 
 	FVector FingerTraceLeft;
 	FVector FingerTraceRight;
 
+	FVector ControllerRightLastTickLocation;
+	FVector ControllerLeftLastTickLocation;
 };

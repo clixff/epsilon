@@ -11,7 +11,7 @@ void APlayerPawnController::MoveForward(float Value)
 		return;
 	}
 
-	UE_LOG(LogTemp, Display, TEXT("MoveForward: %f"), Value);
+	//UE_LOG(LogTemp, Display, TEXT("MoveForward: %f"), Value);
 
 
 	Move(EAxis::X, Value);
@@ -24,7 +24,7 @@ void APlayerPawnController::MoveRight(float Value)
 		return;
 	}
 
-	UE_LOG(LogTemp, Display, TEXT("MoveRight: %f"), Value);
+	//UE_LOG(LogTemp, Display, TEXT("MoveRight: %f"), Value);
 
 
 	Move(EAxis::Y, Value);
@@ -55,7 +55,7 @@ void APlayerPawnController::TurnX(float Value)
 		return;
 	}
 
-	UE_LOG(LogTemp, Display, TEXT("TurnX: %f"), Value);
+	//UE_LOG(LogTemp, Display, TEXT("TurnX: %f"), Value);
 
 	AddYawInput(Value);
 }
@@ -67,7 +67,7 @@ void APlayerPawnController::TurnY(float Value)
 		return;
 	}
 
-	UE_LOG(LogTemp, Display, TEXT("TurnY: %f"), Value);
+	//UE_LOG(LogTemp, Display, TEXT("TurnY: %f"), Value);
 
 	auto* PlayerCharacter = Cast<APlayerCharacter>(GetPawn());
 
