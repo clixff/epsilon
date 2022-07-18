@@ -356,7 +356,7 @@ void APlayerCharacter::OnAction(EHand Hand, bool bGrabPressed)
 		return;
 	}
 
-	auto* GrabComponent = Cast<UGrabComponent>(GrabActor->GrabComponent);
+	auto* GrabComponent = GrabActor->GetNearestGrabComponent(Location);
 
 	if (!GrabComponent)
 	{

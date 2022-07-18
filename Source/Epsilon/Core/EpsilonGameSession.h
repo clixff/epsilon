@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
+#include "Sound/SoundBase.h"
 #include "EpsilonGameSession.generated.h"
 
 /**
@@ -24,5 +25,8 @@ public:
 public:
 	static UEpsilonGameSession* Singleton;
 	static UEpsilonGameSession* Get();
+public:
 
+	UPROPERTY(EditDefaultsOnly)
+		USoundBase* PhysicsHitSound = nullptr;
 };

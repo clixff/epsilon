@@ -47,4 +47,15 @@ public:
 
 	ECollisionEnabled::Type CollisionType = ECollisionEnabled::QueryAndPhysics;
 
+	UGrabComponent* GetNearestGrabComponent(FVector Location);
+
+	UFUNCTION(BlueprintCallable)
+		void OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
+
+public:
+	float DeltaSpeed = 0.0f;
+
+	FVector PrevLocation;
+
+	FManualTimer PhysicsSoundTimeout = FManualTimer(0.1f);
 };

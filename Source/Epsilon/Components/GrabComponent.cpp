@@ -177,7 +177,7 @@ void UGrabComponent::GetTransformForAttach(EHand Hand, FVector& Location, FRotat
 	/** Relative location (Component to actor) */
 	FVector DeltaLocation = GetOwner()->GetActorLocation() - GetComponentLocation();
 
-	float CollisionOffset = GetScaledBoxExtent().X;
+	float CollisionOffset = GetScaledBoxExtent().Y;
 	FRotator ActorRelativeRotation = FRotator(-90.0f, 0.0f, 0.0f);
 
 	if (Hand == EHand::Left)
