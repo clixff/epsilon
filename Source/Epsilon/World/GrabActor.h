@@ -9,6 +9,8 @@
 #include "../Misc/Misc.h"
 #include "GrabActor.generated.h"
 
+class UGeometryCollection;
+
 UCLASS(BlueprintType, Blueprintable)
 class EPSILON_API AGrabActor : public AActor
 {
@@ -52,10 +54,20 @@ public:
 	UFUNCTION(BlueprintCallable)
 		void OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
+	void DestroyMesh();
 public:
 	float DeltaSpeed = 0.0f;
 
-	FVector PrevLocation;
+	FVector PrevLocation = FVector::ZeroVector;
 
 	FManualTimer PhysicsSoundTimeout = FManualTimer(0.1f);
+
+	FManualTimer SpawnTimer = FManualTimer(2.0f);
+
+public:
+	UPROPERTY(EditAnywhere, Category = "GrabActor|Physics")
+		bool bDestroyOnDamage = false;
+
+	UPROPERTY(EditAnywhere, Category = "GrabActor|Physics")
+		UGeometryCollection* GeometryCollectionObject = nullptr;
 };

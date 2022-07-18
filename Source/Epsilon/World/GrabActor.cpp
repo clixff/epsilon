@@ -3,6 +3,9 @@
 
 #include "GrabActor.h"
 #include "Kismet/GameplayStatics.h"
+#include "GeometryCollection/GeometryCollectionActor.h"
+#include "GeometryCollection/GeometryCollectionComponent.h"
+#include "GeometryCollection/GeometryCollectionObject.h"
 #include "../Core/EpsilonGameSession.h"
 
 
@@ -34,7 +37,7 @@ void AGrabActor::BeginPlay()
 	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
 	//CollisionType = StaticMesh->GetCollisionEnabled();
 
-	PhysicsSoundTimeout.Current = PhysicsSoundTimeout.Max;
+	PhysicsSoundTimeout.Current = 0.0f;
 
 	StaticMesh->OnComponentHit.AddDynamic(this, &AGrabActor::OnPhysicsHit);
 }
@@ -52,6 +55,11 @@ void AGrabActor::Tick(float DeltaTime)
 	if (!PhysicsSoundTimeout.IsEnded())
 	{
 		PhysicsSoundTimeout.Add(DeltaTime);
+	}
+
+	if (!SpawnTimer.IsEnded())
+	{
+		SpawnTimer.Add(DeltaTime);
 	}
 }
 
@@ -104,7 +112,17 @@ UGrabComponent* AGrabActor::GetNearestGrabComponent(FVector Location)
 
 void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
+	if (PrevLocation == FVector::ZeroVector)
+	{
+		return;
+	}
+
 	if (!PhysicsSoundTimeout.IsEnded())
+	{
+		return;
+	}
+
+	if (!SpawnTimer.IsEnded())
 	{
 		return;
 	}
@@ -116,6 +134,15 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 
 	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Physics hit for \"%s\". Speed: %f"), *GetName(), DeltaSpeed);
 	FVector Location = Hit.ImpactPoint;
+
+	if (bDestroyOnDamage)
+	{
+		UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Destroying physical object with speed %f"), DeltaSpeed);
+		float Dist = FVector::Dist(PrevLocation, GetActorLocation());
+		UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Physics Timeout: %f. Dist: %f. Prev: %s, Loc: %s"), PhysicsSoundTimeout.Current, Dist, *PrevLocation.ToString(), *GetActorLocation().ToString());
+
+		DestroyMesh();
+	}
 
 	auto* GameSession = UEpsilonGameSession::Get();
 
@@ -133,8 +160,48 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 
 	UGameplayStatics::PlaySoundAtLocation(GetWorld(), Sound, Location, 1.0f, 1.0f);
 
-	DrawDebugSphere(GetWorld(), Location, 20.0f, 8, FColor::Red, 0, -1.0f);
+	DrawDebugSphere(GetWorld(), Location, 20.0f, 8, FColor::Red, 0, 0.5f);
 
 	PhysicsSoundTimeout.Reset();
+}
+
+void AGrabActor::DestroyMesh()
+{
+	if (!GeometryCollectionObject)
+	{
+		return;
+	}
+
+	FVector Velocity = GetVelocity();
+	FVector Velocity2 = StaticMesh->GetPhysicsLinearVelocity();
+	FVector AngularVel = StaticMesh->GetPhysicsAngularVelocityInDegrees();
+	FTransform Transform = StaticMesh->GetComponentTransform();
+
+	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Destroying vel: %s, vel2: %s"), *Velocity.ToString(), *Velocity2.ToString());
+
+
+	Destroy();
+
+	auto* DamagedActor = GetWorld()->SpawnActor<AGeometryCollectionActor>(Transform.GetLocation(), Transform.GetRotation().Rotator(), FActorSpawnParameters());
+
+	DamagedActor->SetActorScale3D(Transform.GetScale3D());
+	auto* Component = DamagedActor->GetGeometryCollectionComponent();
+	Component->UnregisterComponent();
+
+	Component->SetRestCollection(GeometryCollectionObject);
+	Component->ObjectType = EObjectStateTypeEnum::Chaos_Object_Dynamic;
+	Component->DamageThreshold = { 0.1f };
+	Component->InitialLinearVelocity = Velocity2;
+	Component->InitialVelocityType = EInitialVelocityTypeEnum::Chaos_Initial_Velocity_User_Defined;
+	Component->InitialAngularVelocity = AngularVel;
+
+	Component->RegisterComponent();
+
+	Component->SetPhysicsLinearVelocity(Velocity2, false);
+
+	Component->ComponentVelocity = Velocity2;
+
+	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] vel3: %s, vel4: %s"), *DamagedActor->GetVelocity().ToString(), *Component->GetPhysicsLinearVelocity().ToString());
+
 }
 
