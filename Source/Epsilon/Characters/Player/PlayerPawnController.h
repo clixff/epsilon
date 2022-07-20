@@ -33,6 +33,8 @@ public:
 	void OnUnGrab(EHand Hand);
 
 	void OnAction(EHand Hand);
+
+	bool IsGrabButtonPressed(EHand Hand);
 protected:
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;

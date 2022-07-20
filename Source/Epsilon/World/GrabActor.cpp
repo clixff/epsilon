@@ -6,6 +6,7 @@
 #include "GeometryCollection/GeometryCollectionActor.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
+#include "../Characters/Player/PlayerCharacter.h"
 #include "../Core/EpsilonGameSession.h"
 
 
@@ -69,6 +70,8 @@ void AGrabActor::OnGrab(EHand Hand)
 	bGrabbing = true;
 	StaticMesh->SetSimulatePhysics(false);
 
+	HandToAttach = Hand;
+
 	//CollisionType = StaticMesh->GetCollisionEnabled();
 
 	//StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
@@ -112,6 +115,11 @@ UGrabComponent* AGrabActor::GetNearestGrabComponent(FVector Location)
 
 void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit)
 {
+	if (bGrabbing)
+	{
+		PlayAttachedVibration();
+	}
+
 	if (PrevLocation == FVector::ZeroVector)
 	{
 		return;
@@ -203,5 +211,22 @@ void AGrabActor::DestroyMesh()
 
 	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] vel3: %s, vel4: %s"), *DamagedActor->GetVelocity().ToString(), *Component->GetPhysicsLinearVelocity().ToString());
 
+}
+
+void AGrabActor::PlayAttachedVibration()
+{
+	if (!bGrabbing)
+	{
+		return;
+	}
+
+	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
+
+	if (!PlayerCharacter)
+	{
+		return;
+	}
+
+	PlayerCharacter->PlayControllerVibration(HandToAttach, true, 0.5f);
 }
 

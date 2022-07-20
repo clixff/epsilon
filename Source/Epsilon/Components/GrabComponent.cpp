@@ -23,8 +23,6 @@ void UGrabComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorC
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	DrawDebugSphere(GetWorld(), GetComponentLocation(), 5.0f, 8, FColor(128, 128, 128, 255));
-
 	if (ControllerToFlyTo)
 	{
 		FlyToControllerTick(DeltaTime);
@@ -50,6 +48,8 @@ void UGrabComponent::OnGrab(EHand Hand)
 		Actor->OnGrab(Hand);
 	}
 
+	HandToAttach = Hand;
+
 	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
 
 	if (PlayerCharacter)
@@ -64,20 +64,13 @@ void UGrabComponent::OnGrab(EHand Hand)
 			PlayerCharacter->GrabComponentRight = this;
 			PlayerCharacter->GrabComponentFlyingRight = nullptr;
 		}
+
+		PlayerCharacter->PlayControllerVibration(Hand, true);
 	}
 
 	if (Actor && PlayerCharacter)
 	{
-		UPrimitiveComponent* HandComponent = nullptr;
-
-		if (Hand == EHand::Left)
-		{
-			HandComponent = PlayerCharacter->MotionControllerLeft;
-		}
-		else
-		{
-			HandComponent = PlayerCharacter->MotionControllerRight;
-		}
+		auto* HandComponent = PlayerCharacter->GetMotionController(Hand);
 
 		PlayerCharacter->SetFistCollisionEnabled(Hand, false);
 
@@ -98,8 +91,6 @@ void UGrabComponent::OnGrab(EHand Hand)
 	}
 
 	bGrabbing = true;
-
-	GetWorld()->GetFirstPlayerController()->PlayHapticEffect(PlayerCharacter->ControllerVibrationCurve, Hand == EHand::Right ? EControllerHand::Right : EControllerHand::Left, 1.0f, false);
 }
 
 void UGrabComponent::OnUnGrab(EHand Hand)
@@ -144,7 +135,7 @@ void UGrabComponent::OnUnGrab(EHand Hand)
 	bGrabbing = false;
 }
 
-void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
+void UGrabComponent::FlyToController(UPrimitiveComponent* Controller, EHand Hand)
 {
 	if (bGrabbing)
 	{
@@ -152,7 +143,6 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 	}
 
 	auto* Actor = Cast<AGrabActor>(GetOwner());
-
 
 	if (Actor)
 	{
@@ -168,8 +158,6 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 		Actor->bFlyingToController = true;
 		Actor->StaticMesh->SetSimulatePhysics(false);
 		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-
-		//Actor->SetActorRotation(FRotator::ZeroRotator);
 
 		FlyStartRotation = Actor->GetActorRotation();
 	}
@@ -187,6 +175,13 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 
 	FlyTimer.Current = 0.0f;
 	FlyTimer.Max = FMath::Lerp(MinTime, MaxTime, Dist / MaxDist);
+
+	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
+
+	if (PlayerCharacter)
+	{
+		PlayerCharacter->PlayControllerVibration(Hand, true);
+	}
 }
 
 void UGrabComponent::GetTransformForAttach(EHand Hand, FVector& Location, FRotator& Rotation)

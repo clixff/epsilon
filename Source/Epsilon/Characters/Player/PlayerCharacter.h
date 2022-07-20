@@ -10,6 +10,7 @@
 #include "../../Misc/Misc.h"
 #include "Components/BoxComponent.h"
 #include "../../World/GrabActor.h"
+#include "Components/StaticMeshComponent.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -76,6 +77,12 @@ public:
 	UPROPERTY(EditAnywhere)
 		USceneComponent* VROrigin = nullptr;
 
+	UPROPERTY(EditAnywhere)
+		UStaticMeshComponent* GrabPointMeshRight = nullptr;
+
+	UPROPERTY(EditAnywhere)
+		UStaticMeshComponent* GrabPointMeshLeft = nullptr;
+
 	void SetFistCollisionEnabled(EHand Hand, bool bEnabled);
 
 	void UpdateBodyPositionInVR();
@@ -86,6 +93,10 @@ public:
 		TSubclassOf<AGrabActor> GrabActorToSpawn = nullptr;
 
 	void SpawnActor(EHand Hand);
+
+	UMotionControllerComponent* GetMotionController(EHand Hand);
+
+	void PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, float Scale = 1.0f);
 private:
 	void TraceFromFinger(EHand Hand);
 
@@ -101,4 +112,16 @@ private:
 
 	FVector ControllerRightLastTickLocation;
 	FVector ControllerLeftLastTickLocation;
+
+	UGrabComponent* TraceFromFingerGrabRight;
+	UGrabComponent* TraceFromFingerGrabLeft;
+
+	void UpdateNearestItemForTeleport(EHand Hand);
+
+	void OnGrabTeleportAction(EHand Hand);
+
+	void UpdateGrabPoint(EHand Hand);
+private:
+	FManualTimer VibrationTimerRight = FManualTimer(1.0f);
+	FManualTimer VibrationTimerLeft = FManualTimer(1.0f);
 };

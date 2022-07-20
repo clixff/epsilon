@@ -29,9 +29,11 @@ public:
 	UPROPERTY()
 		UPrimitiveComponent* ControllerToFlyTo = nullptr;
 
-	void FlyToController(UPrimitiveComponent* Controller);
+	void FlyToController(UPrimitiveComponent* Controller, EHand Hand);
 
 	void GetTransformForAttach(EHand Hand, FVector& Location, FRotator& Rotation);
+
+	EHand HandToAttach = EHand::Right;
 private:
 	/** Flying to hand */
 

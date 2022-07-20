@@ -177,6 +177,11 @@ void APlayerPawnController::OnAction(EHand Hand)
 	PlayerCharacter->OnAction(Hand, bGrabPressed);
 }
 
+bool APlayerPawnController::IsGrabButtonPressed(EHand Hand)
+{
+	return Hand == EHand::Right ? bRightGrabPressed : bLeftGrabPressed;
+}
+
 void APlayerPawnController::PlayerTick(float DeltaTime)
 {
 	Super::PlayerTick(DeltaTime);

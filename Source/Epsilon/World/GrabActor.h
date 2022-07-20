@@ -55,6 +55,8 @@ public:
 		void OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
 	void DestroyMesh();
+
+	EHand HandToAttach = EHand::Right;
 public:
 	float DeltaSpeed = 0.0f;
 
@@ -70,4 +72,6 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = "GrabActor|Physics")
 		UGeometryCollection* GeometryCollectionObject = nullptr;
+private:
+	void PlayAttachedVibration();
 };

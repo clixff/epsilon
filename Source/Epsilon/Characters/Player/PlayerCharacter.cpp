@@ -6,6 +6,7 @@
 #include "DrawDebugHelpers.h"
 #include "Components/CapsuleComponent.h"
 #include "IXRTrackingSystem.h"
+#include "PlayerPawnController.h"
 #include "Components/ArrowComponent.h"
 
 
@@ -43,6 +44,16 @@ APlayerCharacter::APlayerCharacter()
 	FistCollisionLeft->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 	GetArrowComponent()->SetHiddenInGame(false);
+
+	GrabPointMeshRight = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GrabPointRight"));
+	GrabPointMeshRight->SetupAttachment(VROrigin);
+	GrabPointMeshRight->SetAbsolute(true, true, true);
+	GrabPointMeshRight->SetVisibility(false);
+
+	GrabPointMeshLeft = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("GrabPointLeft"));
+	GrabPointMeshLeft->SetupAttachment(VROrigin);
+	GrabPointMeshLeft->SetAbsolute(true, true, true);
+	GrabPointMeshLeft->SetVisibility(false);
 }
 
 // Called when the game starts or when spawned
@@ -61,6 +72,15 @@ void APlayerCharacter::BeginPlay()
 
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat unit"));
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat fps"));
+
+
+	const float MaxVibrationTimeout = 0.5f;
+
+	VibrationTimerRight.Max = MaxVibrationTimeout;
+	VibrationTimerLeft.Max = MaxVibrationTimeout;
+
+	VibrationTimerRight.Current = VibrationTimerRight.Max;
+	VibrationTimerLeft.Current = VibrationTimerLeft.Max;
 }
 
 // Called every frame
@@ -76,6 +96,19 @@ void APlayerCharacter::Tick(float DeltaTime)
 
 	TraceFromFinger(EHand::Right);
 	TraceFromFinger(EHand::Left);
+
+	UpdateGrabPoint(EHand::Right);
+	UpdateGrabPoint(EHand::Left);
+
+	if (!VibrationTimerLeft.IsEnded())
+	{
+		VibrationTimerLeft.Add(DeltaTime);
+	}
+
+	if (!VibrationTimerRight.IsEnded())
+	{
+		VibrationTimerRight.Add(DeltaTime);
+	}
 }
 
 // Called to bind functionality to input
@@ -102,16 +135,7 @@ void APlayerCharacter::OnGrab(EHand Hand)
 		}
 	}
 
-	UPrimitiveComponent* HandComponent = nullptr;
-
-	if (Hand == EHand::Left)
-	{
-		HandComponent = MotionControllerLeft;
-	}
-	else
-	{
-		HandComponent = MotionControllerRight;
-	}
+	auto* HandComponent = GetMotionController(Hand);
 
 	if (!HandComponent)
 	{
@@ -156,7 +180,7 @@ void APlayerCharacter::OnGrab(EHand Hand)
 	}
 
 	//GrabComponent->OnGrab(Hand);
-	GrabComponent->FlyToController(HandComponent);
+	GrabComponent->FlyToController(HandComponent, Hand);
 }
 
 void APlayerCharacter::OnUnGrab(EHand Hand)
@@ -232,9 +256,38 @@ void APlayerCharacter::SpawnActor(EHand Hand)
 	GetWorld()->SpawnActor<AGrabActor>(GrabActorToSpawn, Location, FRotator::ZeroRotator);
 }
 
+UMotionControllerComponent* APlayerCharacter::GetMotionController(EHand Hand)
+{
+	return Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
+}
+
+void APlayerCharacter::PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, float Scale)
+{
+	FManualTimer& Timeout = Hand == EHand::Right ? VibrationTimerRight : VibrationTimerLeft;
+
+	if (!bIgnoreTimeout && !Timeout.IsEnded())
+	{
+		return;
+	}
+
+	Cast<APlayerController>(GetController())->PlayHapticEffect(ControllerVibrationCurve, Hand == EHand::Right ? EControllerHand::Right : EControllerHand::Left, Scale, false);
+
+	Timeout.Current = 0.0f;
+}
+
 void APlayerCharacter::TraceFromFinger(EHand Hand)
 {
-	auto* ControllerRef = Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
+	if (Hand == EHand::Right)
+	{
+		TraceFromFingerGrabRight = nullptr;
+	}
+	else
+	{
+		TraceFromFingerGrabLeft = nullptr;
+	}
+
+
+	auto* ControllerRef = GetMotionController(Hand);
 	FVector StartLocation = ControllerRef->GetComponentLocation();
 
 	FRotator Rotation = ControllerRef->GetComponentRotation();
@@ -264,14 +317,33 @@ void APlayerCharacter::TraceFromFinger(EHand Hand)
 
 	DrawDebugLine(GetWorld(), StartLocation, RealEndLocation, FColor(255, 255, 255, 128), false, -1.0f, 0, 0.5f);
 
+	bool bItemInHand = false;
+	auto* PlayerPawnController = Cast<APlayerPawnController>(GetController());
+
 	if (Hand == EHand::Right)
 	{
 		FingerTraceRight = RealEndLocation;
+		bItemInHand = !!(GrabComponentRight || GrabComponentFlyingRight);
 	}
 	else
 	{
 		FingerTraceLeft = RealEndLocation;
+		bItemInHand = !!(GrabComponentLeft || GrabComponentFlyingLeft);
 	}
+
+	if (bItemInHand)
+	{
+		return;
+	}
+
+	bool bIsGrabPressed = PlayerPawnController->IsGrabButtonPressed(Hand);
+
+	if (!bIsGrabPressed)
+	{
+		return;
+	}
+
+	UpdateNearestItemForTeleport(Hand);
 }
 
 FVector APlayerCharacter::GetDeltaControllerPosition(EHand Hand)
@@ -301,78 +373,17 @@ FVector APlayerCharacter::GetDeltaControllerPosition(EHand Hand)
 
 void APlayerCharacter::OnAction(EHand Hand, bool bGrabPressed)
 {
-	UMotionControllerComponent* ControllerRef = Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
+	UMotionControllerComponent* ControllerRef = GetMotionController(Hand);
 	FVector& Location = Hand == EHand::Right ? FingerTraceRight : FingerTraceLeft;
 
-	float SphereRadius = 100.0f;
-
-	DrawDebugSphere(GetWorld(), Location, SphereRadius, 8, FColor(109, 89, 227, 255), false, 0.5f);
-
-	if (!bGrabPressed)
+	if (bGrabPressed)
 	{
-		SpawnActor(Hand);
-		return;
-	}
-
-	if (Hand == EHand::Left && (GrabComponentFlyingLeft || GrabComponentLeft))
-	{
-		return;
-	}
-	else if (Hand == EHand::Right && (GrabComponentFlyingRight || GrabComponentRight))
-	{
-		return;
-	}
-
-	TArray<FHitResult> HitResults;
-	FCollisionQueryParams Params;
-	Params.bTraceComplex = false;
-	Params.AddIgnoredActor(this);
-
-	GetWorld()->SweepMultiByChannel(HitResults, Location, Location, FQuat(FRotator::ZeroRotator), ECollisionChannel::ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), Params);
-
-	TArray<AGrabActor*> GrabActors;
-	AGrabActor* GrabActor = nullptr;
-	float MinDist = 0.0f;
-
-	for (auto& HitResult : HitResults)
-	{
-		auto* Actor = Cast<AGrabActor>(HitResult.GetActor());
-
-		if (!Actor)
-		{
-			continue;
-		}
-
-		float Dist = FVector::Dist(Location, Actor->GetActorLocation());
-
-		if (!GrabActor || Dist < MinDist)
-		{
-			GrabActor = Actor;
-			MinDist = Dist;
-		}
-	}
-
-	if (!GrabActor)
-	{
-		return;
-	}
-
-	auto* GrabComponent = GrabActor->GetNearestGrabComponent(Location);
-
-	if (!GrabComponent)
-	{
-		return;
-	}
-
-	GrabComponent->FlyToController(ControllerRef);
-
-	if (Hand == EHand::Right)
-	{
-		GrabComponentFlyingRight = GrabComponent;
+		OnGrabTeleportAction(Hand);
 	}
 	else
 	{
-		GrabComponentFlyingLeft = GrabComponent;
+		SpawnActor(Hand);
+		return;
 	}
 }
 
@@ -381,7 +392,7 @@ void APlayerCharacter::UpdateCachedControllerPosition(EHand Hand, float DeltaTim
 {
 	TArray<FVector>& Array = Hand == EHand::Right ? ControllerRightDeltas : ControllerLeftDeltas;
 
-	UMotionControllerComponent* HandComponent = Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
+	auto* HandComponent = GetMotionController(Hand);
 
 	if (!HandComponent)
 	{
@@ -408,6 +419,115 @@ void APlayerCharacter::UpdateCachedControllerPosition(EHand Hand, float DeltaTim
 	if (Array.Num() > MaxControllerPositions)
 	{
 		Array.RemoveAt(0);
+	}
+}
+
+void APlayerCharacter::UpdateNearestItemForTeleport(EHand Hand)
+{
+	FVector Location = Hand == EHand::Right ? FingerTraceRight : FingerTraceLeft;
+	TArray<FHitResult> HitResults;
+	FCollisionQueryParams Params;
+	Params.bTraceComplex = false;
+	Params.AddIgnoredActor(this);
+
+	float SphereRadius = 100.0f;
+
+	GetWorld()->SweepMultiByChannel(HitResults, Location, Location, FQuat(FRotator::ZeroRotator), ECollisionChannel::ECC_Visibility, FCollisionShape::MakeSphere(SphereRadius), Params);
+
+	UGrabComponent* NearestComponent = nullptr;
+	float MinDist = 0.0f;
+
+	for (auto& HitResult : HitResults)
+	{
+		auto* Actor = Cast<AGrabActor>(HitResult.GetActor());
+
+		if (!Actor)
+		{
+			continue;
+		}
+
+		auto* Component = Actor->GetNearestGrabComponent(Location);
+
+		float Dist = FVector::Dist(Location, Component->GetComponentLocation());
+
+		if (!NearestComponent || Dist < MinDist)
+		{
+			NearestComponent = Component;
+			MinDist = Dist;
+		}
+	}
+	
+	if (!NearestComponent)
+	{
+		return;
+	}
+
+	if (Hand == EHand::Right)
+	{
+		TraceFromFingerGrabRight = NearestComponent;
+	}
+	else
+	{
+		TraceFromFingerGrabLeft = NearestComponent;
+	}
+}
+
+void APlayerCharacter::OnGrabTeleportAction(EHand Hand)
+{
+	UMotionControllerComponent* ControllerRef = GetMotionController(Hand);
+
+	if (Hand == EHand::Left && (GrabComponentFlyingLeft || GrabComponentLeft))
+	{
+		return;
+	}
+	else if (Hand == EHand::Right && (GrabComponentFlyingRight || GrabComponentRight))
+	{
+		return;
+	}
+
+	auto* GrabComponent = Hand == EHand::Right ? TraceFromFingerGrabRight : TraceFromFingerGrabLeft;
+
+	if (!GrabComponent)
+	{
+		return;
+	}
+
+	GrabComponent->FlyToController(ControllerRef, Hand);
+
+	if (Hand == EHand::Right)
+	{
+		GrabComponentFlyingRight = GrabComponent;
+	}
+	else
+	{
+		GrabComponentFlyingLeft = GrabComponent;
+	}
+}
+
+void APlayerCharacter::UpdateGrabPoint(EHand Hand)
+{
+	auto* GrabPoint = Hand == EHand::Right ? GrabPointMeshRight : GrabPointMeshLeft;
+
+	if (!GrabPoint)
+	{
+		return;
+	}
+
+	auto* GrabComponent = Hand == EHand::Right ? TraceFromFingerGrabRight : TraceFromFingerGrabLeft;
+
+	bool bOldVisibility = GrabPoint->IsVisible();
+	bool bNewVisibility = GrabComponent != nullptr;
+
+	FVector NewLocation = GrabComponent ? GrabComponent->GetComponentLocation() : FVector::ZeroVector;
+
+	if (bOldVisibility != bNewVisibility)
+	{
+		GrabPoint->SetVisibility(bNewVisibility);
+	}
+
+	if (bNewVisibility)
+	{
+		GrabPoint->SetWorldLocation(NewLocation);
 	}
 }
 
