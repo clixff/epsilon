@@ -155,7 +155,8 @@ void APlayerCharacter::OnGrab(EHand Hand)
 		return;
 	}
 
-	GrabComponent->OnGrab(Hand);
+	//GrabComponent->OnGrab(Hand);
+	GrabComponent->FlyToController(HandComponent);
 }
 
 void APlayerCharacter::OnUnGrab(EHand Hand)

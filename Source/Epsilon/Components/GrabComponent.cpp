@@ -130,8 +130,13 @@ void UGrabComponent::OnUnGrab(EHand Hand)
 
 	if (PlayerCharacter && Actor)
 	{
+		auto* ControllerRef = Hand == EHand::Right ? PlayerCharacter->MotionControllerRight : PlayerCharacter->MotionControllerLeft;
+
+
+		FRotator HandRotation = ControllerRef->GetComponentRotation();
+		FRotator ObjectRotation = Actor->GetActorRotation();
+
 		FVector Velocity = PlayerCharacter->GetDeltaControllerPosition(Hand);
-		//Velocity.Normalize();
 
 		Actor->StaticMesh->AddImpulse(Velocity, NAME_None, true);
 	}
@@ -148,6 +153,7 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 
 	auto* Actor = Cast<AGrabActor>(GetOwner());
 
+
 	if (Actor)
 	{
 		if (Actor->bGrabbing)
@@ -155,21 +161,32 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller)
 			return;
 		}
 
+		FlyStartLocation = Actor->GetActorLocation();
+
 		Actor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
 		Actor->bFlyingToController = true;
-		//Actor->CollisionType = Actor->StaticMesh->GetCollisionEnabled();
 		Actor->StaticMesh->SetSimulatePhysics(false);
 		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-		FlyStartRotation = Actor->GetActorRotation();
-
 		//Actor->SetActorRotation(FRotator::ZeroRotator);
+
+		FlyStartRotation = Actor->GetActorRotation();
 	}
 
-	FlyValue = 0.0f;
-	FlyStart = GetComponentLocation();
 	ControllerToFlyTo = Controller;
+
+	float Dist = FVector::Dist(GetComponentLocation(), ControllerToFlyTo->GetComponentLocation());
+
+	float MinTime = 0.1f;
+
+	float MaxDist = 350.0f;
+	float MaxTime = 0.75f;
+
+	Dist = FMath::Clamp(Dist, 0.0f, MaxDist);
+
+	FlyTimer.Current = 0.0f;
+	FlyTimer.Max = FMath::Lerp(MinTime, MaxTime, Dist / MaxDist);
 }
 
 void UGrabComponent::GetTransformForAttach(EHand Hand, FVector& Location, FRotator& Rotation)
@@ -197,9 +214,9 @@ void UGrabComponent::GetTransformForAttach(EHand Hand, FVector& Location, FRotat
 
 void UGrabComponent::FlyToControllerTick(float DeltaTime)
 {
-	FlyValue += DeltaTime * 3.0f;
+	FlyTimer.Add(DeltaTime);
 
-	FlyValue = FMath::Clamp(FlyValue, 0.0f, 1.0f);
+	float FlyValue = FMath::Clamp(FlyTimer.Current / FlyTimer.Max, 0.0f, 1.0f);
 
 	auto* Actor = Cast<AGrabActor>(GetOwner());
 	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
@@ -211,40 +228,40 @@ void UGrabComponent::FlyToControllerTick(float DeltaTime)
 		Hand = EHand::Left;
 	}
 
-	//FVector DeltaLocation = Actor->GetActorLocation() - GetComponentLocation();
+	FVector FlyLocationStart = FlyStartLocation;
+	FVector FlyLocationEnd;
+	FVector FlyLocation;
 
-	//float CollisionOffset = GetScaledBoxExtent().X;
+	FRotator FlyRotationStart = FlyStartRotation;
+	FRotator FlyRotationEnd;
+	FRotator FlyRotation;
 
-	//if (Hand == EHand::Left)
-	//{
-	//	CollisionOffset *= -1.0f;
-	//}
+	Actor->SetActorRotation(FRotator::ZeroRotator);
 
-	//DeltaLocation.Y -= CollisionOffset;
-
-	//DeltaLocation = ControllerToFlyTo->GetComponentRotation().RotateVector(DeltaLocation);
-
+	/** Object location in relative space */
 	FVector AttachLocation;
+	/** Object rotation in relative space */
 	FRotator AttachRotation;
 
 	GetTransformForAttach(Hand, AttachLocation, AttachRotation);
 
-	FVector FlyEnd = ControllerToFlyTo->GetComponentLocation() + AttachLocation;
+	Actor->AttachToComponent(ControllerToFlyTo, FAttachmentTransformRules::SnapToTargetNotIncludingScale);
 
-	FVector NewLocation = FMath::Lerp(FlyStart, FlyEnd, FlyValue);
+	Actor->SetActorRelativeLocation(AttachLocation);
+	Actor->SetActorRelativeRotation(AttachRotation);
 
-	Actor->SetActorLocation(NewLocation);
+	/** Object location in world space */
+	FlyLocationEnd = Actor->GetActorLocation();
+	/** Object rotation in world space */
+	FlyRotationEnd = Actor->GetActorRotation();
 
-	FRotator StartRotation = FlyStartRotation;
-	FRotator EndRotation = AttachRotation;
+	Actor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
-	FRotator NewRotation;
+	FlyLocation = FMath::Lerp(FlyLocationStart, FlyLocationEnd, FlyValue);
+	FlyRotation = FMath::Lerp(FlyRotationStart, FlyRotationEnd, FlyValue);
 
-	NewRotation.Pitch = FMath::Lerp(StartRotation.Pitch, EndRotation.Pitch, FlyValue);
-	NewRotation.Yaw = FMath::Lerp(StartRotation.Yaw, EndRotation.Yaw, FlyValue);
-	NewRotation.Roll = FMath::Lerp(StartRotation.Roll, EndRotation.Roll, FlyValue);
-
-	Actor->SetActorRotation(NewRotation);
+	Actor->SetActorLocation(FlyLocation);
+	Actor->SetActorRotation(FlyRotation);
 
 	if (FlyValue >= 1.0f)
 	{
@@ -257,7 +274,8 @@ void UGrabComponent::FlyToControllerTick(float DeltaTime)
 		OnGrab(Hand);
 
 		ControllerToFlyTo = nullptr;
-		FlyValue = 0.0f;
-		FlyStart = FVector::ZeroVector;
+		FlyStartLocation = FVector::ZeroVector;
+		FlyStartRotation = FRotator::ZeroRotator;
+		FlyTimer.Reset();
 	}
 }

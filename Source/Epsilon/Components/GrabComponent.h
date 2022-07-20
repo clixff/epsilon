@@ -33,9 +33,11 @@ public:
 
 	void GetTransformForAttach(EHand Hand, FVector& Location, FRotator& Rotation);
 private:
-	float FlyValue = 0.0f;
+	/** Flying to hand */
 
-	FVector FlyStart;
+	FManualTimer FlyTimer = FManualTimer(1.0f);
+
+	FVector FlyStartLocation;
 	FRotator FlyStartRotation;
 
 	void FlyToControllerTick(float DeltaTime);
