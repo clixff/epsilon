@@ -8,7 +8,9 @@ public class Epsilon : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 	
-		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore", "HeadMountedDisplay", "GeometryCollectionEngine" });
+		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
+
+		PublicDependencyModuleNames.AddRange(new string[] { "HeadMountedDisplay", "GeometryCollectionEngine", "FieldSystemEngine" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 

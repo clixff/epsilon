@@ -446,6 +446,11 @@ void APlayerCharacter::UpdateNearestItemForTeleport(EHand Hand)
 			continue;
 		}
 
+		if (!Actor->bCanGrab || Actor->bGrabbing || Actor->bFlyingToController)
+		{
+			continue;
+		}
+
 		auto* Component = Actor->GetNearestGrabComponent(Location);
 
 		float Dist = FVector::Dist(Location, Component->GetComponentLocation());

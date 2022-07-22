@@ -4,12 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Components/StaticMeshComponent.h"
-#include "../Components/GrabComponent.h"
-#include "../Misc/Misc.h"
+#include "../../Components/GrabComponent.h"
+#include "../../Misc/Misc.h"
+#include "Components/MeshComponent.h"
 #include "GrabActor.generated.h"
-
-class UGeometryCollection;
 
 UCLASS(BlueprintType, Blueprintable)
 class EPSILON_API AGrabActor : public AActor
@@ -28,10 +26,6 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-
-	UPROPERTY(EditAnywhere)
-		UStaticMeshComponent* StaticMesh = nullptr;
-
 	UPROPERTY(EditAnywhere)
 		UGrabComponent* GrabComponent = nullptr;
 
@@ -43,7 +37,7 @@ public:
 
 	void OnGrab(EHand Hand);
 
-	void OnUnGrab();
+	virtual void OnUnGrab();
 
 	bool bFlyingToController = false;
 
@@ -54,9 +48,22 @@ public:
 	UFUNCTION(BlueprintCallable)
 		void OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherActor, UPrimitiveComponent* OtherComponent, FVector NormalImpulse, const FHitResult& Hit);
 
-	void DestroyMesh();
-
 	EHand HandToAttach = EHand::Right;
+
+	virtual UMeshComponent* GetMeshComponent();
+
+	virtual void SetSimulatePhysics(bool bSimulate);
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		bool bCanGrab = true;
+
+	void PlayPhysicsSound(FVector Location);
+
+	void RemoveAttachment();
+
+	UPROPERTY(EditAnywhere)
+		UStaticMeshComponent* StaticMesh = nullptr;
+
 public:
 	float DeltaSpeed = 0.0f;
 
@@ -69,9 +76,8 @@ public:
 public:
 	UPROPERTY(EditAnywhere, Category = "GrabActor|Physics")
 		bool bDestroyOnDamage = false;
-
-	UPROPERTY(EditAnywhere, Category = "GrabActor|Physics")
-		UGeometryCollection* GeometryCollectionObject = nullptr;
 private:
 	void PlayAttachedVibration();
+protected:
+	virtual void DamageObject();
 };

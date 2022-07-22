@@ -6,8 +6,8 @@
 #include "GeometryCollection/GeometryCollectionActor.h"
 #include "GeometryCollection/GeometryCollectionComponent.h"
 #include "GeometryCollection/GeometryCollectionObject.h"
-#include "../Characters/Player/PlayerCharacter.h"
-#include "../Core/EpsilonGameSession.h"
+#include "../../Characters/Player/PlayerCharacter.h"
+#include "../../Core/EpsilonGameSession.h"
 
 
 // Sets default values
@@ -19,7 +19,7 @@ AGrabActor::AGrabActor()
 	StaticMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Mesh"));
 	SetRootComponent(StaticMesh);
 
-	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
+	SetSimulatePhysics(bShouldSimulatePhysics);
 	StaticMesh->CanCharacterStepUpOn = ECanBeCharacterBase::ECB_No;
 	StaticMesh->SetCastShadow(false);
 	StaticMesh->SetGenerateOverlapEvents(false);
@@ -35,12 +35,12 @@ void AGrabActor::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
+	SetSimulatePhysics(bShouldSimulatePhysics);
 	//CollisionType = StaticMesh->GetCollisionEnabled();
 
 	PhysicsSoundTimeout.Current = 0.0f;
 
-	StaticMesh->OnComponentHit.AddDynamic(this, &AGrabActor::OnPhysicsHit);
+	GetMeshComponent()->OnComponentHit.AddDynamic(this, &AGrabActor::OnPhysicsHit);
 }
 
 // Called every frame
@@ -68,7 +68,7 @@ void AGrabActor::OnGrab(EHand Hand)
 {
 	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 	bGrabbing = true;
-	StaticMesh->SetSimulatePhysics(false);
+	SetSimulatePhysics(false);
 
 	HandToAttach = Hand;
 
@@ -80,9 +80,9 @@ void AGrabActor::OnGrab(EHand Hand)
 void AGrabActor::OnUnGrab()
 {
 	bGrabbing = false;
-	StaticMesh->SetCollisionEnabled(CollisionType);
+	GetMeshComponent()->SetCollisionEnabled(CollisionType);
 
-	StaticMesh->SetSimulatePhysics(bShouldSimulatePhysics);
+	SetSimulatePhysics(bShouldSimulatePhysics);
 }
 
 UGrabComponent* AGrabActor::GetNearestGrabComponent(FVector Location)
@@ -125,11 +125,6 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 		return;
 	}
 
-	if (!PhysicsSoundTimeout.IsEnded())
-	{
-		return;
-	}
-
 	if (!SpawnTimer.IsEnded())
 	{
 		return;
@@ -143,13 +138,33 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Physics hit for \"%s\". Speed: %f"), *GetName(), DeltaSpeed);
 	FVector Location = Hit.ImpactPoint;
 
-	if (bDestroyOnDamage)
-	{
-		UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Destroying physical object with speed %f"), DeltaSpeed);
-		float Dist = FVector::Dist(PrevLocation, GetActorLocation());
-		UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Physics Timeout: %f. Dist: %f. Prev: %s, Loc: %s"), PhysicsSoundTimeout.Current, Dist, *PrevLocation.ToString(), *GetActorLocation().ToString());
+	DamageObject();
+		
+	PlayPhysicsSound(Location);
 
-		DestroyMesh();
+	auto* GrabActorOther = Cast<AGrabActor>(OtherActor);
+
+	if (GrabActorOther)
+	{
+		GrabActorOther->DamageObject();
+	}
+}
+
+UMeshComponent* AGrabActor::GetMeshComponent()
+{
+	return StaticMesh;
+}
+
+void AGrabActor::SetSimulatePhysics(bool bSimulate)
+{
+	GetMeshComponent()->SetSimulatePhysics(bSimulate);
+}
+
+void AGrabActor::PlayPhysicsSound(FVector Location)
+{
+	if (!PhysicsSoundTimeout.IsEnded())
+	{
+		return;
 	}
 
 	auto* GameSession = UEpsilonGameSession::Get();
@@ -158,7 +173,7 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 	{
 		return;
 	}
-	
+
 	USoundBase* Sound = GameSession->PhysicsHitSound;
 
 	if (!Sound)
@@ -173,44 +188,43 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 	PhysicsSoundTimeout.Reset();
 }
 
-void AGrabActor::DestroyMesh()
+void AGrabActor::RemoveAttachment()
 {
-	if (!GeometryCollectionObject)
+	DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+	
+	GetMeshComponent()->SetCollisionEnabled(CollisionType);
+
+	SetSimulatePhysics(bShouldSimulatePhysics);
+
+	bGrabbing = false;
+	bFlyingToController = false;
+
+	TInlineComponentArray<UGrabComponent*> GrabComponents(this);
+
+	GetComponents<UGrabComponent>(GrabComponents, true);
+
+	for (auto* GrabComponentRef : GrabComponents)
 	{
-		return;
+		GrabComponentRef->bGrabbing = false;
+		GrabComponentRef->ControllerToFlyTo = nullptr;
 	}
 
-	FVector Velocity = GetVelocity();
-	FVector Velocity2 = StaticMesh->GetPhysicsLinearVelocity();
-	FVector AngularVel = StaticMesh->GetPhysicsAngularVelocityInDegrees();
-	FTransform Transform = StaticMesh->GetComponentTransform();
+	auto* PlayerCharacter = Cast<APlayerCharacter>(GetWorld()->GetFirstPlayerController()->GetPawn());
 
-	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] Destroying vel: %s, vel2: %s"), *Velocity.ToString(), *Velocity2.ToString());
+	if (HandToAttach == EHand::Right)
+	{
+		PlayerCharacter->GrabComponentRight = nullptr;
+		PlayerCharacter->GrabComponentFlyingRight = nullptr;
+	}
+	else
+	{
+		PlayerCharacter->GrabComponentLeft = nullptr;
+		PlayerCharacter->GrabComponentFlyingLeft = nullptr;
+	}
+}
 
-
-	Destroy();
-
-	auto* DamagedActor = GetWorld()->SpawnActor<AGeometryCollectionActor>(Transform.GetLocation(), Transform.GetRotation().Rotator(), FActorSpawnParameters());
-
-	DamagedActor->SetActorScale3D(Transform.GetScale3D());
-	auto* Component = DamagedActor->GetGeometryCollectionComponent();
-	Component->UnregisterComponent();
-
-	Component->SetRestCollection(GeometryCollectionObject);
-	Component->ObjectType = EObjectStateTypeEnum::Chaos_Object_Dynamic;
-	Component->DamageThreshold = { 0.1f };
-	Component->InitialLinearVelocity = Velocity2;
-	Component->InitialVelocityType = EInitialVelocityTypeEnum::Chaos_Initial_Velocity_User_Defined;
-	Component->InitialAngularVelocity = AngularVel;
-
-	Component->RegisterComponent();
-
-	Component->SetPhysicsLinearVelocity(Velocity2, false);
-
-	Component->ComponentVelocity = Velocity2;
-
-	UE_LOG(LogTemp, Display, TEXT("[AGrabActor] vel3: %s, vel4: %s"), *DamagedActor->GetVelocity().ToString(), *Component->GetPhysicsLinearVelocity().ToString());
-
+void AGrabActor::DamageObject()
+{
 }
 
 void AGrabActor::PlayAttachedVibration()

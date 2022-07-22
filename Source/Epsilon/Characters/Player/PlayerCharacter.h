@@ -9,7 +9,7 @@
 #include "../../Components/GrabComponent.h"
 #include "../../Misc/Misc.h"
 #include "Components/BoxComponent.h"
-#include "../../World/GrabActor.h"
+#include "../../World/Grab/GrabActor.h"
 #include "Components/StaticMeshComponent.h"
 #include "PlayerCharacter.generated.h"
 

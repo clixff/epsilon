@@ -4,7 +4,7 @@
 #include "GrabComponent.h"
 #include "DrawDebugHelpers.h"
 #include "../Characters/Player/PlayerCharacter.h"
-#include "../World/GrabActor.h"
+#include "../World/Grab/GrabActor.h"
 
 
 UGrabComponent::UGrabComponent(const FObjectInitializer& ObjectInitializer)
@@ -40,7 +40,7 @@ void UGrabComponent::OnGrab(EHand Hand)
 
 	if (Actor)
 	{
-		if (Actor->bGrabbing || Actor->bFlyingToController)
+		if (Actor->bGrabbing || Actor->bFlyingToController || !Actor->bCanGrab)
 		{
 			return;
 		}
@@ -114,22 +114,23 @@ void UGrabComponent::OnUnGrab(EHand Hand)
 
 	if (Actor)
 	{
-		Actor->OnUnGrab();
-
 		Actor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+		Actor->OnUnGrab();
 	}
 
 	if (PlayerCharacter && Actor)
 	{
 		auto* ControllerRef = Hand == EHand::Right ? PlayerCharacter->MotionControllerRight : PlayerCharacter->MotionControllerLeft;
 
-
 		FRotator HandRotation = ControllerRef->GetComponentRotation();
 		FRotator ObjectRotation = Actor->GetActorRotation();
 
 		FVector Velocity = PlayerCharacter->GetDeltaControllerPosition(Hand);
 
-		Actor->StaticMesh->AddImpulse(Velocity, NAME_None, true);
+		UE_LOG(LogTemp, Display, TEXT("[UGrabComponent] UnGrab velocity was %s"), *Velocity.ToString());
+
+		Actor->GetMeshComponent()->AddImpulse(Velocity, NAME_None, true);
 	}
 
 	bGrabbing = false;
@@ -146,7 +147,7 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller, EHand Hand
 
 	if (Actor)
 	{
-		if (Actor->bGrabbing)
+		if (Actor->bGrabbing || !Actor->bCanGrab)
 		{
 			return;
 		}
@@ -156,8 +157,8 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller, EHand Hand
 		Actor->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
 
 		Actor->bFlyingToController = true;
-		Actor->StaticMesh->SetSimulatePhysics(false);
-		Actor->StaticMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Actor->SetSimulatePhysics(false);
+		Actor->GetMeshComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
 		FlyStartRotation = Actor->GetActorRotation();
 	}
@@ -263,7 +264,7 @@ void UGrabComponent::FlyToControllerTick(float DeltaTime)
 		if (Actor)
 		{
 			Actor->bFlyingToController = false;
-			Actor->StaticMesh->SetCollisionEnabled(Actor->CollisionType);
+			Actor->GetMeshComponent()->SetCollisionEnabled(Actor->CollisionType);
 		}
 
 		OnGrab(Hand);
