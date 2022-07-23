@@ -54,6 +54,21 @@ APlayerCharacter::APlayerCharacter()
 	GrabPointMeshLeft->SetupAttachment(VROrigin);
 	GrabPointMeshLeft->SetAbsolute(true, true, true);
 	GrabPointMeshLeft->SetVisibility(false);
+
+	auto SetWidgetInteraction = [this](UWidgetInteractionComponent** ComponentRef, FName Name, UMotionControllerComponent* Parent)
+	{
+		(*ComponentRef) = CreateDefaultSubobject<UWidgetInteractionComponent>(Name);
+		auto* Component = *ComponentRef;
+		Component->SetupAttachment(Parent);
+		Component->InteractionDistance = 500.0f;
+		Component->SetRelativeRotation(FRotator(-90.0f, 0.0f, 0.0f));
+		Component->SetRelativeLocation(FingerTraceOffset);
+		Component->InteractionSource = EWidgetInteractionSource::World;
+		Component->bShowDebug = true;
+	};
+
+	SetWidgetInteraction(&WidgetInteractionRight, TEXT("WidgetInteractionRight"), MotionControllerRight);
+	SetWidgetInteraction(&WidgetInteractionLeft, TEXT("WidgetInteractionLeft"), MotionControllerLeft);
 }
 
 // Called when the game starts or when spawned
@@ -61,14 +76,18 @@ void APlayerCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	
-	bool bVREnabled = UHeadMountedDisplayFunctionLibrary::IsHeadMountedDisplayEnabled();
+	bIsVREnabled = UHeadMountedDisplayFunctionLibrary::IsHeadMountedDisplayEnabled();
 
-	if (bVREnabled)
+	if (bIsVREnabled)
 	{
 		UHeadMountedDisplayFunctionLibrary::SetTrackingOrigin(EHMDTrackingOrigin::Floor);
 	}
+	else
+	{
+		SetNonVRControls();
+	}
 
-	UE_LOG(LogTemp, Display, TEXT("[APlayerPawn] bVREnabled: %d"), bVREnabled);
+	UE_LOG(LogTemp, Display, TEXT("[APlayerPawn] VR Enabled: %d"), bIsVREnabled);
 
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat unit"));
 	Cast<APlayerController>(GetController())->ConsoleCommand(TEXT("stat fps"));
@@ -261,7 +280,7 @@ UMotionControllerComponent* APlayerCharacter::GetMotionController(EHand Hand)
 	return Hand == EHand::Right ? MotionControllerRight : MotionControllerLeft;
 }
 
-void APlayerCharacter::PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, float Scale)
+void APlayerCharacter::PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, float Scale, EVibrationType Type)
 {
 	FManualTimer& Timeout = Hand == EHand::Right ? VibrationTimerRight : VibrationTimerLeft;
 
@@ -270,9 +289,57 @@ void APlayerCharacter::PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, 
 		return;
 	}
 
-	Cast<APlayerController>(GetController())->PlayHapticEffect(ControllerVibrationCurve, Hand == EHand::Right ? EControllerHand::Right : EControllerHand::Left, Scale, false);
+	UHapticFeedbackEffect_Base* VibrationCurve = nullptr;
+
+	switch (Type)
+	{
+	case EVibrationType::Grab:
+		VibrationCurve = ControllerVibrationGrab;
+		break;
+	case EVibrationType::Physics:
+		VibrationCurve = ControllerVibrationPhysics;
+		break;
+	}
+
+	if (!VibrationCurve)
+	{
+		return;
+	}
+
+	Cast<APlayerController>(GetController())->PlayHapticEffect(VibrationCurve, Hand == EHand::Right ? EControllerHand::Right : EControllerHand::Left, Scale, false);
 
 	Timeout.Current = 0.0f;
+}
+
+UWidgetInteractionComponent* APlayerCharacter::GetWidgetInteractionComponent(EHand Hand)
+{
+	return Hand == EHand::Right ? WidgetInteractionRight : WidgetInteractionLeft;
+}
+
+void APlayerCharacter::TriggerStateChanged(EHand Hand, bool bPressed)
+{
+	auto* Component = GetWidgetInteractionComponent(Hand);
+	
+	if (!Component)
+	{
+		return;
+	}
+
+	FKey LeftMouse = FKey(TEXT("LeftMouseButton"));
+
+	if (bPressed)
+	{
+		Component->PressPointerKey(LeftMouse);
+	}
+	else
+	{
+		Component->ReleasePointerKey(LeftMouse);
+	}
+}
+
+bool APlayerCharacter::IsVREnabled()
+{
+	return bIsVREnabled;
 }
 
 void APlayerCharacter::TraceFromFinger(EHand Hand)
@@ -286,6 +353,7 @@ void APlayerCharacter::TraceFromFinger(EHand Hand)
 		TraceFromFingerGrabLeft = nullptr;
 	}
 
+	auto* WidgetInteraction = GetWidgetInteractionComponent(Hand);
 
 	auto* ControllerRef = GetMotionController(Hand);
 	FVector StartLocation = ControllerRef->GetComponentLocation();
@@ -307,11 +375,35 @@ void APlayerCharacter::TraceFromFinger(EHand Hand)
 	Params.AddIgnoredActor(this);
 	Params.bTraceComplex = true;
 
-	GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECollisionChannel::ECC_GameTraceChannel1, Params);
+	bool bShouldTrace = true;
+	bool bBlockingHit = false;
 
-	if (HitResult.bBlockingHit)
+	if (WidgetInteraction)
 	{
-		RealEndLocation = HitResult.ImpactPoint;
+		FHitResult WidgetHit = WidgetInteraction->GetLastHitResult();
+		if (WidgetHit.bBlockingHit)
+		{
+			bShouldTrace = false;
+			bBlockingHit = true;
+			RealEndLocation = WidgetHit.ImpactPoint;
+		}
+	}
+
+	if (bShouldTrace)
+	{
+		GetWorld()->LineTraceSingleByChannel(HitResult, StartLocation, EndLocation, ECollisionChannel::ECC_GameTraceChannel1, Params);
+
+		bBlockingHit = HitResult.bBlockingHit;
+
+		if (bBlockingHit)
+		{
+			RealEndLocation = HitResult.ImpactPoint;
+		}
+	}
+
+
+	if (bBlockingHit)
+	{
 		DrawDebugSphere(GetWorld(), RealEndLocation, 5.0f, 8, FColor(0, 255, 0, 255), false, -1.0f, 0, 0);
 	}
 
@@ -359,7 +451,7 @@ FVector APlayerCharacter::GetDeltaControllerPosition(EHand Hand)
 
 	FVector Delta;
 
-	const float Scale = 300.0f;
+	const float Scale = 0.3f;
 
 	for (int32 i = 0; i < Array.Num(); i++)
 	{
@@ -376,12 +468,24 @@ void APlayerCharacter::OnAction(EHand Hand, bool bGrabPressed)
 	UMotionControllerComponent* ControllerRef = GetMotionController(Hand);
 	FVector& Location = Hand == EHand::Right ? FingerTraceRight : FingerTraceLeft;
 
+
 	if (bGrabPressed)
 	{
 		OnGrabTeleportAction(Hand);
 	}
 	else
 	{
+		auto* WidgetInteraction = GetWidgetInteractionComponent(Hand);
+
+		if (WidgetInteraction)
+		{
+			FHitResult WidgetHit = WidgetInteraction->GetLastHitResult();
+			if (WidgetHit.bBlockingHit)
+			{
+				return;
+			}
+		}
+
 		SpawnActor(Hand);
 		return;
 	}
@@ -403,7 +507,7 @@ void APlayerCharacter::UpdateCachedControllerPosition(EHand Hand, float DeltaTim
 	FVector OldLocation = Hand == EHand::Right ? ControllerRightLastTickLocation : ControllerLeftLastTickLocation;
 
 	FVector Delta;
-	Delta = (WorldLocation - OldLocation) * DeltaTime;
+	Delta = (WorldLocation - OldLocation) / DeltaTime;
 
 	if (Hand == EHand::Right)
 	{
@@ -534,5 +638,18 @@ void APlayerCharacter::UpdateGrabPoint(EHand Hand)
 	{
 		GrabPoint->SetWorldLocation(NewLocation);
 	}
+}
+
+void APlayerCharacter::SetNonVRControls()
+{
+	FRotator Rotation = FRotator(90.0f, 0.0f, 0.0f);
+	MotionControllerRight->SetRelativeRotation(Rotation);
+	MotionControllerLeft->SetRelativeRotation(Rotation);
+
+	FVector HandLocation = FVector(41.0f, 24.0f, 30.0f);
+	MotionControllerRight->SetRelativeLocation(HandLocation);
+	MotionControllerLeft->SetRelativeLocation(HandLocation * FVector(1.0f, -1.0f, 1.0f));
+
+	Camera->SetRelativeLocation(FVector(0.0f, 0.0f, 70.0f));
 }
 

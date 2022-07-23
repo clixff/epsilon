@@ -7,10 +7,11 @@
 #include "../../Components/GrabComponent.h"
 #include "../../Misc/Misc.h"
 #include "Components/MeshComponent.h"
+#include "../Prop.h"
 #include "GrabActor.generated.h"
 
 UCLASS(BlueprintType, Blueprintable)
-class EPSILON_API AGrabActor : public AActor
+class EPSILON_API AGrabActor : public AProp
 {
 	GENERATED_BODY()
 	
@@ -63,6 +64,9 @@ public:
 
 	UPROPERTY(EditAnywhere)
 		UStaticMeshComponent* StaticMesh = nullptr;
+
+	UPROPERTY(EditAnywhere)
+		USoundBase* HitSound = nullptr;
 
 public:
 	float DeltaSpeed = 0.0f;

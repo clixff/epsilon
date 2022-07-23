@@ -11,6 +11,7 @@
 #include "Components/BoxComponent.h"
 #include "../../World/Grab/GrabActor.h"
 #include "Components/StaticMeshComponent.h"
+#include "Components/WidgetInteractionComponent.h"
 #include "PlayerCharacter.generated.h"
 
 UCLASS()
@@ -43,10 +44,13 @@ public:
 		UMotionControllerComponent* MotionControllerRight = nullptr;
 
 	UPROPERTY(EditAnywhere)
-		UHapticFeedbackEffect_Base* ControllerVibrationCurve;
+		UHapticFeedbackEffect_Base* ControllerVibrationPhysics;
 
 	UPROPERTY(EditAnywhere)
-		FVector FingerTraceOffset;
+		UHapticFeedbackEffect_Base* ControllerVibrationGrab;
+
+	UPROPERTY(EditAnywhere)
+		FVector FingerTraceOffset = FVector(3.0f, 0.0f, -4.0f);
 
 	UPROPERTY(VisibleAnywhere)
 		UGrabComponent* GrabComponentRight = nullptr;
@@ -96,7 +100,19 @@ public:
 
 	UMotionControllerComponent* GetMotionController(EHand Hand);
 
-	void PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, float Scale = 1.0f);
+	void PlayControllerVibration(EHand Hand, bool bIgnoreTimeout, float Scale = 1.0f, EVibrationType Type = EVibrationType::Physics);
+
+	UPROPERTY(EditAnywhere)
+		UWidgetInteractionComponent* WidgetInteractionRight = nullptr;
+
+	UPROPERTY(EditAnywhere)
+		UWidgetInteractionComponent* WidgetInteractionLeft = nullptr;
+
+	UWidgetInteractionComponent* GetWidgetInteractionComponent(EHand Hand);
+
+	void TriggerStateChanged(EHand Hand, bool bPressed);
+
+	bool IsVREnabled();
 private:
 	void TraceFromFinger(EHand Hand);
 
@@ -121,7 +137,12 @@ private:
 	void OnGrabTeleportAction(EHand Hand);
 
 	void UpdateGrabPoint(EHand Hand);
+
+	void SetNonVRControls();
+
+	bool bIsVREnabled = false;
 private:
 	FManualTimer VibrationTimerRight = FManualTimer(1.0f);
 	FManualTimer VibrationTimerLeft = FManualTimer(1.0f);
+
 };

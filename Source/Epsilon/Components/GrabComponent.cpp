@@ -65,7 +65,7 @@ void UGrabComponent::OnGrab(EHand Hand)
 			PlayerCharacter->GrabComponentFlyingRight = nullptr;
 		}
 
-		PlayerCharacter->PlayControllerVibration(Hand, true);
+		PlayerCharacter->PlayControllerVibration(Hand, true, 1.0f, EVibrationType::Grab);
 	}
 
 	if (Actor && PlayerCharacter)
@@ -181,7 +181,7 @@ void UGrabComponent::FlyToController(UPrimitiveComponent* Controller, EHand Hand
 
 	if (PlayerCharacter)
 	{
-		PlayerCharacter->PlayControllerVibration(Hand, true);
+		//PlayerCharacter->PlayControllerVibration(Hand, true, 1.0f, EVibrationType::Grab);
 	}
 }
 

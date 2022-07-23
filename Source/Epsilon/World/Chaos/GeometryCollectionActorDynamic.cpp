@@ -13,6 +13,7 @@ AGeometryCollectionActorDynamic::AGeometryCollectionActorDynamic()
 	Field->SetupAttachment(GetRootComponent());
 
 	GetGeometryCollectionComponent()->SetCastShadow(false);
+	GetGeometryCollectionComponent()->SetCanEverAffectNavigation(false);
 }
 
 AGeometryCollectionActorDynamic::~AGeometryCollectionActorDynamic()

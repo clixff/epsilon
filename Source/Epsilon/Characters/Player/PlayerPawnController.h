@@ -34,7 +34,14 @@ public:
 
 	void OnAction(EHand Hand);
 
+	void OnTriggerReleased(EHand Hand);
+
 	bool IsGrabButtonPressed(EHand Hand);
+
+	void OnMiddleMousePressed();
+	void OnMiddleMouseReleased();
+
+	void MoveHandByMouse(EAxis::Type Axis, float Value);
 protected:
 	virtual void PlayerTick(float DeltaTime) override;
 	virtual void SetupInputComponent() override;
@@ -42,4 +49,5 @@ protected:
 
 	bool bLeftGrabPressed = false;
 	bool bRightGrabPressed = false;
+	bool bMiddleMouseButtonPressed = false;
 };

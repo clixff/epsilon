@@ -25,6 +25,7 @@ AGrabActor::AGrabActor()
 	StaticMesh->SetGenerateOverlapEvents(false);
 	StaticMesh->SetCollisionProfileName(TEXT("PhysicsActor"));
 	StaticMesh->SetNotifyRigidBodyCollision(true);
+	StaticMesh->SetCanEverAffectNavigation(false);
 
 	GrabComponent = CreateDefaultSubobject<UGrabComponent>(TEXT("Grab"));
 	GrabComponent->SetupAttachment(StaticMesh);
@@ -49,7 +50,7 @@ void AGrabActor::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 
 	FVector Location = GetActorLocation();
-	DeltaSpeed = (PrevLocation - Location).Length() * DeltaTime;
+	DeltaSpeed = StaticMesh->GetComponentVelocity().Length();
 
 	PrevLocation = Location;
 
@@ -130,7 +131,7 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 		return;
 	}
 
-	if (DeltaSpeed < 0.25f)
+	if (DeltaSpeed < 400.0f)
 	{
 		return;
 	}
@@ -147,6 +148,7 @@ void AGrabActor::OnPhysicsHit(UPrimitiveComponent* HitComponent, AActor* OtherAc
 	if (GrabActorOther)
 	{
 		GrabActorOther->DamageObject();
+		GrabActorOther->PlayPhysicsSound(Location);
 	}
 }
 
@@ -167,14 +169,19 @@ void AGrabActor::PlayPhysicsSound(FVector Location)
 		return;
 	}
 
-	auto* GameSession = UEpsilonGameSession::Get();
+	USoundBase* Sound = HitSound;
 
-	if (!GameSession)
+	if (!Sound)
 	{
-		return;
-	}
+		auto* GameSession = UEpsilonGameSession::Get();
 
-	USoundBase* Sound = GameSession->PhysicsHitSound;
+		if (!GameSession)
+		{
+			return;
+		}
+
+		Sound = GameSession->PhysicsHitSound;
+	}
 
 	if (!Sound)
 	{
@@ -241,6 +248,6 @@ void AGrabActor::PlayAttachedVibration()
 		return;
 	}
 
-	PlayerCharacter->PlayControllerVibration(HandToAttach, true, 0.5f);
+	PlayerCharacter->PlayControllerVibration(HandToAttach, true, 0.5f, EVibrationType::Physics);
 }
 

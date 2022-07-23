@@ -14,6 +14,13 @@ enum class EHand : uint8
 	Right
 };
 
+UENUM()
+enum class EVibrationType : uint8
+{
+	Physics,
+	Grab
+};
+
 
 USTRUCT(BlueprintType)
 struct FManualTimer

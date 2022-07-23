@@ -10,7 +10,7 @@ public class Epsilon : ModuleRules
 	
 		PublicDependencyModuleNames.AddRange(new string[] { "Core", "CoreUObject", "Engine", "InputCore" });
 
-		PublicDependencyModuleNames.AddRange(new string[] { "HeadMountedDisplay", "GeometryCollectionEngine", "FieldSystemEngine" });
+		PublicDependencyModuleNames.AddRange(new string[] { "HeadMountedDisplay", "GeometryCollectionEngine", "FieldSystemEngine", "UMG" });
 
 		PrivateDependencyModuleNames.AddRange(new string[] {  });
 
